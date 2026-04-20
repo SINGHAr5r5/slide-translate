@@ -62,6 +62,7 @@ const ENGINES = [
   { id:"googletrans", name:"Google Translate", icon:"🔍", free:true,  placeholder:"",           hint:"ฟรี ไม่ต้องใส่ Key",                                                      url:null },
   { id:"mymemory",   name:"MyMemory",         icon:"🌐", free:true,  placeholder:"",           hint:"ฟรี ไม่ต้องใส่ Key",                                                      url:null },
   { id:"groq",       name:"Groq · Llama 3.3", icon:"⚡", free:false, placeholder:"gsk_...",    hint:"สมัครฟรี ไม่ต้องใส่บัตร — ใช้ Llama 3.3 70B",                            url:"https://console.groq.com/keys" },
+  { id:"gemma4",     name:"Gemma 4 (27B)",    icon:"🔮", free:false, placeholder:"AIza...",    hint:"ใช้ Gemini API Key เดิม — Gemma 4 27B โมเดลใหม่จาก Google",              url:"https://aistudio.google.com/app/apikey" },
   { id:"claude",     name:"Claude (Sonnet)",  icon:"🤖", free:false, placeholder:"sk-ant-...", hint:"เข้าใจเว็บแล้วไปที่ Account → API Keys",                                  url:"https://console.anthropic.com/settings/keys" },
   { id:"openai",     name:"GPT-4o",           icon:"🧠", free:false, placeholder:"sk-...",     hint:"เข้าใจเว็บแล้วไปที่ Dashboard → API Keys",                               url:"https://platform.openai.com/api-keys" },
   { id:"gemini",     name:"Gemini Flash",     icon:"✨", free:false, placeholder:"AIza...",    hint:"สมัครฟรี มี free quota ใช้ได้เยอะ",                                        url:"https://aistudio.google.com/app/apikey" },
@@ -468,6 +469,7 @@ export default function App() {
         else if (engine === "googletrans") res = await callGoogleTrans(input, lang);
         else if (engine === "groq")        res = await callGroq(input, lang);
         else if (engine === "openai")      res = await callOpenAI(input, lang);
+        else if (engine === "gemma4")      res = await callGemma4(input, lang);
         else if (engine === "gemini")      res = await callGemini(input, lang);
         else                               res = await callClaude(input, lang);
         results.push(...res);
@@ -571,6 +573,18 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
   const callGemini = async (batchData, lang) => {
     if (!geminiKey) throw new Error("กรุณาใส่ Gemini API Key ก่อน (กด 🔑)");
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ contents:[{ parts:[{ text:buildAIPrompt(batchData, lang) }] }] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    return JSON.parse(data.candidates[0].content.parts[0].text.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, ""));
+  };
+
+  const callGemma4 = async (batchData, lang) => {
+    if (!geminiKey) throw new Error("กรุณาใส่ Gemini API Key ก่อน (กด 🔑) — Gemma 4 ใช้ Key เดียวกับ Gemini");
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemma-4-27b-it:generateContent?key=${geminiKey}`, {
       method: "POST",
       headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ contents:[{ parts:[{ text:buildAIPrompt(batchData, lang) }] }] })
