@@ -1202,19 +1202,28 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
               {/* Preview content */}
               <div style={{ padding:"24px" }}>
                 {isXlsx ? (
-                  /* Excel: table view */
-                  <div style={{ overflowX:"auto" }}>
+                  /* Excel: spreadsheet-style table */
+                  <div style={{ overflowX:"auto", borderRadius:10, border:"1px solid #1a1a35" }}>
                     <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:`'${lang?.webFont}', sans-serif`, fontSize:13 }}>
+                      <thead>
+                        <tr style={{ background:"rgba(99,102,241,0.15)" }}>
+                          <th style={{ padding:"8px 12px", color:"#8b8bff", fontSize:11, textAlign:"left", borderBottom:"1px solid #2a2a50", width:70 }}>Cell</th>
+                          <th style={{ padding:"8px 12px", color:"#8b8bff", fontSize:11, textAlign:"left", borderBottom:"1px solid #2a2a50" }}>ต้นฉบับ</th>
+                          <th style={{ padding:"8px 12px", color:"#10b981", fontSize:11, textAlign:"left", borderBottom:"1px solid #2a2a50" }}>แปลแล้ว</th>
+                        </tr>
+                      </thead>
                       <tbody>
                         {previewTrans?.paragraphs.map((p, i) => {
                           const skipKey = `${previewSlide?.num}-${p.idx}`;
                           const isSkipped = skippedParas.has(skipKey);
                           const origText = previewSlide?.paras[i]?.text || p.text;
                           return (
-                            <tr key={i} style={{ borderBottom:"1px solid #1a1a35" }}>
-                              <td style={{ padding:"8px 10px", color:"#6a6a9a", fontSize:11, whiteSpace:"nowrap", width:60 }}>{p.idx}</td>
-                              <td style={{ padding:"8px 10px", color:"#8a8ac0", fontSize:12 }}>{origText}</td>
-                              <td style={{ padding:"8px 10px", color: isSkipped ? "#6a6a9a" : "#dde1f0", fontStyle: isSkipped ? "italic" : "normal" }}>{isSkipped ? origText : p.text}</td>
+                            <tr key={i} style={{ borderBottom:"1px solid #1a1a35", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                              <td style={{ padding:"8px 12px", color:"#6a6a9a", fontSize:11, fontFamily:"monospace" }}>{p.idx}</td>
+                              <td style={{ padding:"8px 12px", color:"#8a8ac0", fontSize:13 }}>{origText}</td>
+                              <td style={{ padding:"8px 12px", color: isSkipped ? "#6a6a9a" : "#dde1f0", fontStyle: isSkipped ? "italic" : "normal" }}>
+                                {isSkipped ? <span style={{ opacity:0.5 }}>{origText} <span style={{ color:"#f87171", fontSize:10 }}>(ต้นฉบับ)</span></span> : p.text}
+                              </td>
                             </tr>
                           );
                         })}
@@ -1222,40 +1231,103 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
                     </table>
                   </div>
                 ) : isDocx ? (
-                  /* Word: document view */
-                  <div style={{ background:"#fff", borderRadius:10, padding:"40px 48px", maxWidth:700, margin:"0 auto", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
-                    {previewTrans?.paragraphs.map((p, i) => {
-                      const skipKey = `${previewSlide?.num}-${p.idx}`;
-                      const isSkipped = skippedParas.has(skipKey);
-                      const origText = previewSlide?.paras[i]?.text || p.text;
-                      return (
-                        <p key={i} style={{ margin:"0 0 12px 0", fontFamily:`'${lang?.webFont}', serif`, fontSize:14, lineHeight:1.8, color: isSkipped ? "#999" : "#111", fontStyle: isSkipped ? "italic" : "normal", direction: lang?.rtl ? "rtl" : "ltr" }}>
-                          {isSkipped ? origText : p.text}
-                        </p>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  /* PowerPoint: slide-like 16:9 card */
-                  <div style={{ position:"relative", width:"100%", paddingTop:"56.25%", background:"linear-gradient(135deg,#1a1a3e,#0d0d28)", borderRadius:12, overflow:"hidden", boxShadow:"0 8px 32px rgba(0,0,0,0.5)", border:"2px solid #2a2a50" }}>
-                    <div style={{ position:"absolute", inset:0, padding:"5%", display:"flex", flexDirection:"column", justifyContent:"center", gap:"2%", overflow:"hidden" }}>
+                  /* Word: realistic A4 document */
+                  <div style={{ background:"#e8e8e8", borderRadius:10, padding:"16px", display:"flex", justifyContent:"center" }}>
+                    <div style={{ background:"#fff", width:"100%", maxWidth:680, minHeight:480, boxShadow:"0 4px 24px rgba(0,0,0,0.5)", borderRadius:2, padding:"60px 72px", position:"relative" }}>
+                      {/* Page corner fold */}
+                      <div style={{ position:"absolute", top:0, right:0, width:20, height:20, background:"linear-gradient(135deg, #e8e8e8 50%, transparent 50%)" }} />
                       {previewTrans?.paragraphs.map((p, i) => {
                         const skipKey = `${previewSlide?.num}-${p.idx}`;
                         const isSkipped = skippedParas.has(skipKey);
                         const origText = previewSlide?.paras[i]?.text || p.text;
                         const displayText = isSkipped ? origText : p.text;
                         return (
-                          <div key={i} style={{ fontFamily:`'${lang?.webFont}', sans-serif`, fontSize:"clamp(10px, 2.2vw, 22px)", lineHeight:1.5, color: isSkipped ? "rgba(160,160,180,0.6)" : "#ffffff", fontStyle: isSkipped ? "italic" : "normal", direction: lang?.rtl ? "rtl" : "ltr", textAlign: lang?.rtl ? "right" : "left", overflow:"hidden", maxHeight:"20%", textOverflow:"ellipsis", whiteSpace:"pre-wrap" }}>
+                          <p key={i} style={{ margin:"0 0 14px 0", fontFamily:`'${lang?.webFont}', Georgia, serif`, fontSize:14, lineHeight:1.85, color: isSkipped ? "#aaa" : "#1a1a1a", textDecoration: isSkipped ? "line-through" : "none", direction: lang?.rtl ? "rtl" : "ltr", textAlign: lang?.rtl ? "right" : "justify" }}>
                             {displayText}
-                          </div>
+                          </p>
                         );
                       })}
-                      {/* Slide number badge */}
-                      <div style={{ position:"absolute", bottom:"3%", right:"3%", fontSize:"clamp(8px,1.2vw,13px)", color:"rgba(255,255,255,0.25)", fontFamily:"monospace" }}>
-                        {previewSlide?.num} / {slides.length}
-                      </div>
                     </div>
                   </div>
+                ) : (
+                  /* PowerPoint: premium slide design */
+                  (() => {
+                    const paras = previewTrans?.paragraphs || [];
+                    const titlePara = paras[0];
+                    const bodyParas = paras.slice(1);
+                    const themes = [
+                      { bg:"linear-gradient(135deg,#1e3a8a,#1e40af,#1d4ed8)", accent:"#60a5fa", body:"rgba(219,234,254,0.9)", bar:"#3b82f6" },
+                      { bg:"linear-gradient(135deg,#1a1a3e,#312e81,#1e1b4b)", accent:"#a78bfa", body:"rgba(237,233,254,0.9)", bar:"#7c3aed" },
+                      { bg:"linear-gradient(135deg,#064e3b,#065f46,#047857)", accent:"#34d399", body:"rgba(209,250,229,0.9)", bar:"#10b981" },
+                      { bg:"linear-gradient(135deg,#7c2d12,#92400e,#78350f)", accent:"#fbbf24", body:"rgba(254,243,199,0.9)", bar:"#f59e0b" },
+                      { bg:"linear-gradient(135deg,#1f2937,#111827,#0f172a)", accent:"#94a3b8", body:"rgba(226,232,240,0.9)", bar:"#64748b" },
+                    ];
+                    const theme = themes[(previewSlide?.num ?? 1) % themes.length];
+                    return (
+                      <div style={{ position:"relative", width:"100%", paddingTop:"56.25%", background:theme.bg, borderRadius:14, overflow:"hidden", boxShadow:"0 16px 48px rgba(0,0,0,0.6)" }}>
+                        <div style={{ position:"absolute", inset:0 }}>
+                          {/* Top accent bar */}
+                          <div style={{ position:"absolute", top:0, left:0, right:0, height:"1%", background:theme.bar }} />
+
+                          {/* Decorative circles (background accent) */}
+                          <div style={{ position:"absolute", bottom:"-8%", right:"-5%", width:"30%", paddingTop:"30%", borderRadius:"50%", background:`${theme.bar}18` }} />
+                          <div style={{ position:"absolute", top:"-5%", left:"-3%", width:"18%", paddingTop:"18%", borderRadius:"50%", background:`${theme.bar}10` }} />
+
+                          {/* Left accent line */}
+                          <div style={{ position:"absolute", left:"6%", top:"12%", bottom:"12%", width:"0.5%", background:`${theme.bar}60`, borderRadius:4 }} />
+
+                          {/* Content */}
+                          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", justifyContent:"center", padding:"8% 9% 8% 10%" }}>
+                            {/* Title */}
+                            {titlePara && (() => {
+                              const skipKey = `${previewSlide?.num}-${titlePara.idx}`;
+                              const isTitleSkipped = skippedParas.has(skipKey);
+                              const titleOrig = previewSlide?.paras[0]?.text || titlePara.text;
+                              return (
+                                <div style={{ marginBottom:"5%", opacity: isTitleSkipped ? 0.4 : 1 }}>
+                                  <div style={{ fontFamily:`'${lang?.webFont}', sans-serif`, fontSize:"clamp(14px,3.5vw,38px)", fontWeight:700, color:"#fff", lineHeight:1.2, direction: lang?.rtl ? "rtl" : "ltr", textShadow:"0 2px 12px rgba(0,0,0,0.4)", letterSpacing:"-0.01em" }}>
+                                    {isTitleSkipped ? titleOrig : titlePara.text}
+                                  </div>
+                                  {isTitleSkipped && <div style={{ fontSize:"clamp(8px,1vw,11px)", color:"#f87171", marginTop:4 }}>⛔ ต้นฉบับ</div>}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Divider */}
+                            <div style={{ width:"12%", height:"2px", background:theme.accent, marginBottom:"4%", borderRadius:2 }} />
+
+                            {/* Body bullets */}
+                            <div style={{ display:"flex", flexDirection:"column", gap:"2.5%" }}>
+                              {bodyParas.map((p, i) => {
+                                const skipKey = `${previewSlide?.num}-${p.idx}`;
+                                const isSkipped = skippedParas.has(skipKey);
+                                const origText = previewSlide?.paras[i + 1]?.text || p.text;
+                                const displayText = isSkipped ? origText : p.text;
+                                return (
+                                  <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:"2%", opacity: isSkipped ? 0.45 : 1 }}>
+                                    <div style={{ width:"clamp(4px,0.8vw,8px)", height:"clamp(4px,0.8vw,8px)", borderRadius:"50%", background: isSkipped ? "#999" : theme.accent, flexShrink:0, marginTop:"0.6em" }} />
+                                    <div style={{ fontFamily:`'${lang?.webFont}', sans-serif`, fontSize:"clamp(10px,2vw,20px)", lineHeight:1.55, color: isSkipped ? "rgba(200,200,220,0.5)" : theme.body, fontStyle: isSkipped ? "italic" : "normal", direction: lang?.rtl ? "rtl" : "ltr", flex:1 }}>
+                                      {displayText}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Bottom bar */}
+                          <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"10%", background:"rgba(0,0,0,0.25)", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 4%" }}>
+                            <div style={{ fontFamily:"sans-serif", fontSize:"clamp(7px,1.1vw,12px)", color:"rgba(255,255,255,0.4)", letterSpacing:"0.05em" }}>
+                              {file?.name}
+                            </div>
+                            <div style={{ fontFamily:"sans-serif", fontSize:"clamp(8px,1.2vw,13px)", color:"rgba(255,255,255,0.5)" }}>
+                              {previewSlide?.num} / {slides.length}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
 
