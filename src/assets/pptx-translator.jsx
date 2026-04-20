@@ -1,5 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+// ── Inject viewport meta for proper mobile scaling ─────────────────
+if (typeof document !== "undefined" && !document.querySelector('meta[name="viewport"]')) {
+  const meta = document.createElement("meta");
+  meta.name = "viewport";
+  meta.content = "width=device-width, initial-scale=1, maximum-scale=1";
+  document.head.appendChild(meta);
+}
+
+// ── Mobile breakpoint hook ─────────────────────────────────────────
+function useIsMobile(bp = 640) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < bp);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < bp);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [bp]);
+  return isMobile;
+}
+
 // ── Language registry ──────────────────────────────────────────────
 const LANGS = [
   { code:"th",     name:"ไทย",           flag:"🇹🇭", eng:"Thai",                webFont:"Sarabun",              gfont:"Sarabun:wght@400;600;700",               pptxLatin:"TH Sarabun New",   pptxEA:"TH Sarabun New" },
@@ -38,18 +57,27 @@ const LANGS = [
   { code:"sw",     name:"Kiswahili",      flag:"🇰🇪", eng:"Swahili",              webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
 ];
 
+// ── Engine registry ────────────────────────────────────────────────
+const ENGINES = [
+  { id:"googletrans", name:"Google Translate", icon:"🔍", free:true,  placeholder:"",           hint:"ฟรี ไม่ต้องใส่ Key — ใช้ Google Translate API" },
+  { id:"mymemory",   name:"MyMemory",         icon:"🌐", free:true,  placeholder:"",           hint:"ฟรี ไม่ต้องใส่ Key — MyMemory Translation" },
+  { id:"claude",     name:"Claude (Sonnet)",  icon:"🤖", free:false, placeholder:"sk-ant-...", hint:"API Key จาก console.anthropic.com" },
+  { id:"openai",     name:"GPT-4o",           icon:"🧠", free:false, placeholder:"sk-...",     hint:"API Key จาก platform.openai.com" },
+  { id:"gemini",     name:"Gemini Flash",     icon:"✨", free:false, placeholder:"AIza...",    hint:"API Key จาก aistudio.google.com" },
+];
+
 // ── Inline styles ──────────────────────────────────────────────────
 const S = {
-  app: { minHeight:"100vh", background:"#070711", color:"#dde1f0", fontFamily:"'Plus Jakarta Sans', sans-serif", display:"flex", flexDirection:"column" },
-  header: { background:"rgba(10,10,25,0.95)", borderBottom:"1px solid #1a1a35", padding:"0 28px", height:60, display:"flex", alignItems:"center", justifyContent:"space-between", backdropFilter:"blur(12px)", position:"sticky", top:0, zIndex:100 },
+  app: { minHeight:"100vh", background:"#070711", color:"#dde1f0", fontFamily:"'Plus Jakarta Sans', sans-serif", display:"flex", flexDirection:"column", overflowX:"hidden" },
+  header: { background:"rgba(10,10,25,0.95)", borderBottom:"1px solid #1a1a35", padding:"0 16px", minHeight:60, display:"flex", alignItems:"center", justifyContent:"space-between", backdropFilter:"blur(12px)", position:"sticky", top:0, zIndex:100, flexWrap:"wrap", gap:8 },
   logo: { display:"flex", alignItems:"center", gap:10, fontWeight:700, fontSize:18, letterSpacing:-0.5, color:"#fff" },
   logoDot: { width:10, height:10, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)" },
-  main: { flex:1, maxWidth:1100, width:"100%", margin:"0 auto", padding:"32px 24px" },
-  stepper: { display:"flex", alignItems:"center", gap:0, marginBottom:40 },
+  main: { flex:1, maxWidth:1100, width:"100%", margin:"0 auto", padding:"20px 16px", boxSizing:"border-box" },
+  stepper: { display:"flex", alignItems:"center", gap:0, marginBottom:28, overflowX:"auto", paddingBottom:4 },
   stepItem: (active, done) => ({ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:100, fontSize:13, fontWeight:600, color: done ? "#6366f1" : active ? "#fff" : "#4a4a7a", background: active ? "rgba(99,102,241,0.15)" : "transparent", border: active ? "1px solid rgba(99,102,241,0.4)" : "1px solid transparent", transition:"all 0.3s" }),
   stepNum: (active, done) => ({ width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, background: done ? "#6366f1" : active ? "rgba(99,102,241,0.8)" : "#1e1e3a", color:"#fff", flexShrink:0 }),
   stepLine: { flex:1, height:1, background:"#1e1e3a", maxWidth:40 },
-  card: { background:"#0e0e1e", border:"1px solid #1a1a35", borderRadius:16, padding:28 },
+  card: { background:"#0e0e1e", border:"1px solid #1a1a35", borderRadius:16, padding:20 },
   uploadZone: (drag) => ({ border: `2px dashed ${drag?"#6366f1":"#2a2a50"}`, borderRadius:16, padding:"64px 32px", display:"flex", flexDirection:"column", alignItems:"center", gap:16, cursor:"pointer", transition:"all 0.2s", background: drag?"rgba(99,102,241,0.05)":"rgba(14,14,30,0.5)", textAlign:"center" }),
   btn: { background:"linear-gradient(135deg,#6366f1,#8b5cf6)", color:"#fff", border:"none", borderRadius:10, padding:"12px 28px", fontSize:14, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:8, transition:"opacity 0.2s" },
   btnOutline: { background:"transparent", color:"#6366f1", border:"1px solid #6366f1", borderRadius:10, padding:"11px 24px", fontSize:14, fontWeight:600, cursor:"pointer", transition:"all 0.2s" },
@@ -62,7 +90,7 @@ const S = {
   langCard: (sel) => ({ border:`1px solid ${sel?"#6366f1":"#1e1e3a"}`, borderRadius:12, padding:"12px 14px", cursor:"pointer", display:"flex", alignItems:"center", gap:10, background: sel?"rgba(99,102,241,0.1)":"#0e0e1e", transition:"all 0.15s" }),
   fbField: { display:"flex", flexDirection:"column", gap:6, flex:1 },
   label: { fontSize:12, fontWeight:600, color:"#6a6a9a", letterSpacing:0.5 },
-  grid2: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:28 },
+  grid2: (mobile) => ({ display:"grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 16 : 28 }),
   textBlock: (font, rtl) => ({ fontFamily:`'${font}', sans-serif`, direction: rtl?"rtl":"ltr", textAlign: rtl?"right":"left", lineHeight:1.8, fontSize:15, color:"#dde1f0" }),
 };
 
@@ -156,6 +184,7 @@ async function fbUpload(file, path) {
 
 // ── Main component ─────────────────────────────────────────────────
 export default function App() {
+  const isMobile = useIsMobile();
   const [ready, setReady] = useState(false);
   const [step, setStep] = useState(0);           // 0=upload 1=lang 2=translating 3=done
   const [file, setFile] = useState(null);
@@ -174,8 +203,10 @@ export default function App() {
   const [fbResultUrl, setFbResultUrl] = useState(null);
   const [showOriginal, setShowOriginal] = useState(false);
   const [isPpt, setIsPpt] = useState(false);
-  const [engine, setEngine] = useState(() => { const e = localStorage.getItem("engine"); return e === "libre" ? "mymemory" : (e || "mymemory"); });
+  const [engine, setEngine] = useState(() => { const e = localStorage.getItem("engine"); return e === "libre" ? "mymemory" : (e || "googletrans"); });
   const [claudeKey, setClaudeKey] = useState(() => localStorage.getItem("claude_api_key") || "");
+  const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem("openai_api_key") || "");
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
   const [srcLang, setSrcLang] = useState(() => localStorage.getItem("src_lang") || "en");
   const [showKey, setShowKey] = useState(false);
   const zipRef = useRef(null);
@@ -239,7 +270,7 @@ export default function App() {
         i += 8;
       } else if (recType === 4000 && recLen > 0) {
         // TextCharsAtom — UTF-16LE
-        const text = new TextDecoder("utf-16le").decode(buf.slice(i + 8, i + 8 + recLen)).replace(/\r/g, "").trim();
+        const text = new TextDecoder("utf-16le").decode(new Uint8Array(buf.slice(i + 8, i + 8 + recLen))).replace(/\r/g, "").trim();
         if (text && currentTexts !== null) currentTexts.push(text);
         i += 8 + recLen;
       } else if (recType === 4008 && recLen > 0) {
@@ -327,16 +358,21 @@ export default function App() {
     if (!lang || !slides.length) return;
     setBusy(true);
     setStep(2);
-    const BATCH = 3;
+    // Free engines use larger batch; AI engines process all at once per batch
+    const BATCH = (engine === "mymemory" || engine === "googletrans") ? 10 : 5;
     const results = [];
     try {
       for (let i = 0; i < slides.length; i += BATCH) {
         const batch = slides.slice(i, i + BATCH);
         const pct = Math.round((i / slides.length) * 90);
         setProgress({ pct, msg: `แปลสไลด์ ${i + 1}–${Math.min(i + BATCH, slides.length)} จาก ${slides.length}...` });
-
         const input = batch.map(s => ({ slideNum: s.num, paragraphs: s.paras }));
-        const res = engine === "mymemory" ? await callMyMemory(input, lang) : await callClaude(input, lang);
+        let res;
+        if (engine === "mymemory")   res = await callMyMemory(input, lang);
+        else if (engine === "googletrans") res = await callGoogleTrans(input, lang);
+        else if (engine === "openai")  res = await callOpenAI(input, lang);
+        else if (engine === "gemini")  res = await callGemini(input, lang);
+        else                           res = await callClaude(input, lang);
         results.push(...res);
       }
       setTranslated(results);
@@ -351,53 +387,82 @@ export default function App() {
     }
   };
 
+  // ── Shared AI prompt builder ──
+  const buildAIPrompt = (batchData, lang) =>
+    `You are a professional PowerPoint translator. Translate slide text to ${lang.eng} (${lang.name}).
+Rules: Return ONLY valid JSON (same structure), no markdown. Preserve numbers, symbols, URLs. Natural fluent translation.
+
+Input: ${JSON.stringify(batchData)}`;
+
   const callClaude = async (batchData, lang) => {
-    const prompt = `You are a professional translator. Translate the PowerPoint slide text to ${lang.eng} (${lang.name}).
-Return ONLY a valid JSON array — no markdown fences, no explanation.
-
-Input JSON:
-${JSON.stringify(batchData)}
-
-Return exactly the same JSON structure but with the "text" values translated to ${lang.eng}. Preserve any numbers, URLs, or formatting symbols.`;
-
-    if (!claudeKey) throw new Error("กรุณาใส่ Claude API Key ก่อน");
+    if (!claudeKey) throw new Error("กรุณาใส่ Claude API Key ก่อน (กด 🔑)");
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": claudeKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5-20251001",
-        max_tokens: 4000,
-        messages: [{ role: "user", content: prompt }]
-      })
+      headers: { "Content-Type":"application/json", "x-api-key":claudeKey, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
+      body: JSON.stringify({ model:"claude-sonnet-4-5-20251001", max_tokens:4000, messages:[{ role:"user", content:buildAIPrompt(batchData, lang) }] })
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
-    const raw = data.content[0].text.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, "");
-    return JSON.parse(raw);
+    return JSON.parse(data.content[0].text.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, ""));
+  };
+
+  const callOpenAI = async (batchData, lang) => {
+    if (!openaiKey) throw new Error("กรุณาใส่ OpenAI API Key ก่อน (กด 🔑)");
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "Authorization":`Bearer ${openaiKey}` },
+      body: JSON.stringify({ model:"gpt-4o-mini", max_tokens:4000, messages:[{ role:"user", content:buildAIPrompt(batchData, lang) }] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    return JSON.parse(data.choices[0].message.content.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, ""));
+  };
+
+  const callGemini = async (batchData, lang) => {
+    if (!geminiKey) throw new Error("กรุณาใส่ Gemini API Key ก่อน (กด 🔑)");
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ contents:[{ parts:[{ text:buildAIPrompt(batchData, lang) }] }] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    return JSON.parse(data.candidates[0].content.parts[0].text.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, ""));
+  };
+
+  const callGoogleTrans = async (batchData, lang) => {
+    const GT_MAP = { "zh-CN":"zh-CN", "zh-TW":"zh-TW", "zh-yue":"zh-TW" };
+    const target = GT_MAP[lang.code] || lang.code;
+    const src = srcLang === "zh" ? "zh-CN" : srcLang;
+    const translateOne = async (p) => {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${target}&dt=t&q=${encodeURIComponent(p.text)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Google Translate HTTP ${res.status}`);
+      const data = await res.json();
+      const translated = data[0]?.map(item => item?.[0] || "").join("") || p.text;
+      return { idx: p.idx, text: translated };
+    };
+    return Promise.all(batchData.map(async (slideData) => ({
+      slideNum: slideData.slideNum,
+      paragraphs: await Promise.all(slideData.paragraphs.map(translateOne))
+    })));
   };
 
   const callMyMemory = async (batchData, lang) => {
     const MM_MAP = { "zh-CN":"zh-CN", "zh-TW":"zh-TW", "zh-yue":"zh-CN" };
     const target = MM_MAP[lang.code] || lang.code;
-    const results = [];
-    for (const slideData of batchData) {
-      const paragraphs = [];
-      for (const p of slideData.paragraphs) {
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(p.text)}&langpair=${srcLang}|${target}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`MyMemory HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.responseStatus !== 200) throw new Error(data.responseDetails || "MyMemory error");
-        paragraphs.push({ idx: p.idx, text: data.responseData.translatedText });
-      }
-      results.push({ slideNum: slideData.slideNum, paragraphs });
-    }
-    return results;
+    const translateOne = async (p) => {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(p.text)}&langpair=${srcLang}|${target}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`MyMemory HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.responseStatus !== 200) throw new Error(data.responseDetails || "MyMemory error");
+      return { idx: p.idx, text: data.responseData.translatedText };
+    };
+    return Promise.all(batchData.map(async (slideData) => ({
+      slideNum: slideData.slideNum,
+      paragraphs: await Promise.all(slideData.paragraphs.map(translateOne))
+    })));
   };
 
   // ── Download PPTX ──
@@ -502,47 +567,66 @@ Return exactly the same JSON structure but with the "text" values translated to 
   return (
     <div style={S.app}>
       {/* Header */}
-      <header style={S.header}>
-        <div style={S.logo}>
+      <header style={{ ...S.header, padding: isMobile ? "8px 16px" : "0 28px", height: isMobile ? "auto" : 60 }}>
+        <div style={{ ...S.logo, fontSize: isMobile ? 15 : 18 }}>
           <div style={S.logoDot} />
           <span>SlideTranslate</span>
-          <span style={{ fontSize:11, color:"#4a4a7a", fontWeight:400, marginLeft:4 }}>AI PowerPoint Translator</span>
+          {!isMobile && <span style={{ fontSize:11, color:"#4a4a7a", fontWeight:400, marginLeft:4 }}>AI PowerPoint Translator</span>}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          {step === 3 && <span style={S.tag("green")}>✓ แปลสำเร็จ {slides.length} สไลด์</span>}
-          {["mymemory","claude"].map(e => (
-            <button key={e} style={{ ...S.btnSmall, background: engine===e ? "rgba(99,102,241,0.25)" : undefined, borderColor: engine===e ? "rgba(99,102,241,0.6)" : undefined }}
-              onClick={() => { setEngine(e); localStorage.setItem("engine", e); }}>
-              {e==="mymemory" ? "🌐 MyMemory" : "🤖 Claude"}
-            </button>
-          ))}
-          {engine === "claude" && (
-            <button style={{ ...S.btnSmall, background: showKey ? "rgba(99,102,241,0.25)" : undefined, borderColor: showKey ? "rgba(99,102,241,0.6)" : undefined }} onClick={() => setShowKey(!showKey)}>
-              🔑 API Key {claudeKey ? "●" : "○"}
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          {step === 3 && !isMobile && <span style={S.tag("green")}>✓ แปลสำเร็จ {slides.length} สไลด์</span>}
+          {/* Engine selector dropdown */}
+          <select
+            value={engine}
+            onChange={e => { setEngine(e.target.value); localStorage.setItem("engine", e.target.value); setShowKey(false); }}
+            style={{ ...S.input, width:"auto", padding: isMobile ? "5px 8px" : "6px 10px", fontSize: isMobile ? 11 : 12, cursor:"pointer", background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.4)", color:"#a5a5ff", borderRadius:8 }}
+          >
+            {ENGINES.map(eng => (
+              <option key={eng.id} value={eng.id} style={{ background:"#0e0e1e", color:"#dde1f0" }}>
+                {eng.icon} {eng.name}{eng.free ? " (ฟรี)" : ""}
+              </option>
+            ))}
+          </select>
+          {/* Key button — only for engines that need a key */}
+          {!ENGINES.find(e => e.id === engine)?.free && (
+            <button
+              style={{ ...S.btnSmall, fontSize: isMobile ? 11 : 12, padding: isMobile ? "5px 10px" : "6px 12px", background: showKey ? "rgba(99,102,241,0.25)" : undefined, borderColor: showKey ? "rgba(99,102,241,0.6)" : undefined }}
+              onClick={() => setShowKey(v => !v)}
+            >
+              🔑 {isMobile ? "Key" : "API Key"} {(engine==="claude"?claudeKey:engine==="openai"?openaiKey:geminiKey) ? "●" : "○"}
             </button>
           )}
         </div>
       </header>
 
-      {/* Claude API Key Panel */}
-      {showKey && (
-        <div style={{ background:"#0a0a1e", borderBottom:"1px solid #1a1a35", padding:"16px 28px" }}>
-          <div style={{ maxWidth:1100, margin:"0 auto", display:"flex", alignItems:"center", gap:16 }}>
-            <div style={{ flex:1 }}>
-              <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>Claude API Key</div>
-              <div style={{ fontSize:12, color:"#6a6a9a" }}>ใส่ key จาก console.anthropic.com — เก็บใน localStorage เท่านั้น ไม่ส่งออก</div>
+      {/* Unified API Key Panel */}
+      {showKey && !ENGINES.find(e => e.id === engine)?.free && (() => {
+        const eng    = ENGINES.find(e => e.id === engine);
+        const keyVal = engine==="claude" ? claudeKey : engine==="openai" ? openaiKey : geminiKey;
+        const setKey = (v) => {
+          if (engine==="claude")  { setClaudeKey(v);  localStorage.setItem("claude_api_key", v); }
+          else if (engine==="openai")  { setOpenaiKey(v); localStorage.setItem("openai_api_key", v); }
+          else                        { setGeminiKey(v); localStorage.setItem("gemini_api_key", v); }
+        };
+        return (
+          <div style={{ background:"#0a0a1e", borderBottom:"1px solid #1a1a35", padding: isMobile ? "12px 16px" : "16px 28px" }}>
+            <div style={{ maxWidth:1100, margin:"0 auto", display:"flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap:12 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{eng.icon} {eng.name} — API Key</div>
+                <div style={{ fontSize:12, color:"#6a6a9a" }}>{eng.hint} — เก็บใน localStorage เท่านั้น ไม่ส่งออก</div>
+              </div>
+              <input
+                style={{ ...S.input, width:"100%", maxWidth: isMobile ? "100%" : 400, fontFamily:"monospace", fontSize:13 }}
+                type="password"
+                placeholder={eng.placeholder}
+                value={keyVal}
+                onChange={e => setKey(e.target.value)}
+              />
+              <button style={{ ...S.btnSmall, alignSelf: isMobile ? "flex-end" : "auto" }} onClick={() => setShowKey(false)}>ปิด</button>
             </div>
-            <input
-              style={{ ...S.input, width:380, fontFamily:"monospace", fontSize:13 }}
-              type="password"
-              placeholder="sk-ant-..."
-              value={claudeKey}
-              onChange={e => { setClaudeKey(e.target.value); localStorage.setItem("claude_api_key", e.target.value); }}
-            />
-            <button style={S.btnSmall} onClick={() => setShowKey(false)}>ปิด</button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
 
 
@@ -560,7 +644,7 @@ Return exactly the same JSON structure but with the "text" values translated to 
                 เปิดใช้งาน Firebase
               </label>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap:12 }}>
               {[
                 ["apiKey", "API Key"],
                 ["authDomain", "Auth Domain"],
@@ -600,12 +684,12 @@ Return exactly the same JSON structure but with the "text" values translated to 
         {/* Stepper */}
         <div style={S.stepper}>
           {STEPS.map((label, i) => (
-            <div key={i} style={{ display:"flex", alignItems:"center" }}>
-              <div style={S.stepItem(step === i, step > i)}>
+            <div key={i} style={{ display:"flex", alignItems:"center", flexShrink:0 }}>
+              <div style={{ ...S.stepItem(step === i, step > i), padding: isMobile ? "6px 10px" : "8px 16px", fontSize: isMobile ? 11 : 13 }}>
                 <div style={S.stepNum(step === i, step > i)}>{step > i ? "✓" : i + 1}</div>
-                {label}
+                {!isMobile || step === i ? label : null}
               </div>
-              {i < STEPS.length - 1 && <div style={S.stepLine} />}
+              {i < STEPS.length - 1 && <div style={{ ...S.stepLine, maxWidth: isMobile ? 16 : 40 }} />}
             </div>
           ))}
         </div>
@@ -614,17 +698,17 @@ Return exactly the same JSON structure but with the "text" values translated to 
         {step === 0 && (
           <div style={S.card}>
             <div
-              style={S.uploadZone(drag)}
+              style={{ ...S.uploadZone(drag), padding: isMobile ? "36px 16px" : "64px 32px" }}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
               onClick={() => document.getElementById("fileInput").click()}
             >
-              <div style={{ fontSize:56 }}>📊</div>
-              <div style={{ fontSize:20, fontWeight:700, color:"#fff" }}>วางไฟล์ PowerPoint ที่นี่</div>
-              <div style={{ fontSize:14, color:"#6a6a9a" }}>หรือคลิกเพื่อเลือกไฟล์ .pptx / .ppt จากเครื่อง</div>
+              <div style={{ fontSize: isMobile ? 44 : 56 }}>📊</div>
+              <div style={{ fontSize: isMobile ? 17 : 20, fontWeight:700, color:"#fff" }}>{isMobile ? "แตะเพื่อเลือกไฟล์" : "วางไฟล์ PowerPoint ที่นี่"}</div>
+              <div style={{ fontSize: isMobile ? 12 : 14, color:"#6a6a9a" }}>รองรับไฟล์ .pptx / .ppt</div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"center", marginTop:8 }}>
-                {["ภาษาไทย", "中文", "日本語", "한국어", "ລາວ", "ภาษาอื่นๆ 30+ ภาษา"].map(t => (
+                {["ภาษาไทย", "中文", "日本語", "한국어", "ລາວ", "30+ ภาษา"].map(t => (
                   <span key={t} style={S.tag("blue")}>{t}</span>
                 ))}
               </div>
@@ -637,10 +721,10 @@ Return exactly the same JSON structure but with the "text" values translated to 
             </div>
             <input id="fileInput" type="file" accept=".pptx,.ppt" style={{ display:"none" }} onChange={e => handleFile(e.target.files[0])} />
 
-            <div style={{ marginTop:20, padding:16, background:"rgba(99,102,241,0.05)", borderRadius:12, border:"1px solid rgba(99,102,241,0.15)", fontSize:13, color:"#8a8ac0", lineHeight:1.7 }}>
+            <div style={{ marginTop:16, padding:14, background:"rgba(99,102,241,0.05)", borderRadius:12, border:"1px solid rgba(99,102,241,0.15)", fontSize: isMobile ? 12 : 13, color:"#8a8ac0", lineHeight:1.7 }}>
               <strong style={{ color:"#a5a5ff" }}>💡 หมายเหตุเรื่อง Font</strong><br />
               Web Preview → โหลด Google Fonts ตามภาษาโดยอัตโนมัติ<br />
-              ไฟล์ PPTX ที่ดาวน์โหลด → เปลี่ยน font declaration ใน XML ให้ตรงกับภาษา เช่น TH Sarabun New (ไทย), Microsoft YaHei (จีน), DokChampa (ลาว)
+              ไฟล์ PPTX ที่ดาวน์โหลด → เปลี่ยน font declaration ใน XML ให้ตรงกับภาษา
             </div>
           </div>
         )}
@@ -648,12 +732,12 @@ Return exactly the same JSON structure but with the "text" values translated to 
         {/* ── STEP 1: Language ── */}
         {step === 1 && (
           <div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+            <div style={{ display:"flex", flexDirection: isMobile ? "column" : "row", justifyContent:"space-between", alignItems: isMobile ? "stretch" : "flex-start", marginBottom:20, gap:12 }}>
               <div>
-                <div style={{ fontSize:22, fontWeight:700, color:"#fff", marginBottom:6 }}>เลือกภาษาที่ต้องการแปล</div>
-                <div style={{ fontSize:13, color:"#6a6a9a" }}>ไฟล์: <strong style={{ color:"#a5a5ff" }}>{file?.name}</strong> · {slides.length} สไลด์ · {slides.reduce((a, s) => a + s.paras.length, 0)} ข้อความ</div>
+                <div style={{ fontSize: isMobile ? 18 : 22, fontWeight:700, color:"#fff", marginBottom:6 }}>เลือกภาษาที่ต้องการแปล</div>
+                <div style={{ fontSize: isMobile ? 12 : 13, color:"#6a6a9a" }}>ไฟล์: <strong style={{ color:"#a5a5ff" }}>{file?.name}</strong> · {slides.length} สไลด์</div>
               </div>
-              <button style={{ ...S.btnOutline, opacity: lang ? 1 : 0.4 }} onClick={lang ? doTranslate : undefined}>
+              <button style={{ ...S.btnOutline, opacity: lang ? 1 : 0.4, alignSelf: isMobile ? "flex-start" : "auto" }} onClick={lang ? doTranslate : undefined}>
                 แปลเลย →
               </button>
             </div>
@@ -712,7 +796,7 @@ Return exactly the same JSON structure but with the "text" values translated to 
         {step === 2 && (
           <div style={{ ...S.card, textAlign:"center", padding:"64px 32px" }}>
             <div style={{ fontSize:48, marginBottom:20 }}>✨</div>
-            <div style={{ fontSize:22, fontWeight:700, color:"#fff", marginBottom:8 }}>กำลังแปลด้วย AI...</div>
+            <div style={{ fontSize:22, fontWeight:700, color:"#fff", marginBottom:8 }}>กำลังแปลด้วย {ENGINES.find(e=>e.id===engine)?.icon} {ENGINES.find(e=>e.id===engine)?.name}...</div>
             <div style={{ fontSize:14, color:"#6a6a9a", marginBottom:32 }}>{progress.msg}</div>
             <div style={{ maxWidth:400, margin:"0 auto" }}>
               <div style={{ ...S.progress, height:10 }}>
@@ -738,17 +822,17 @@ Return exactly the same JSON structure but with the "text" values translated to 
         {step === 3 && (
           <div>
             {/* Action bar */}
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24, flexWrap:"wrap", gap:12 }}>
+            <div style={{ display:"flex", flexDirection: isMobile ? "column" : "row", justifyContent:"space-between", alignItems: isMobile ? "stretch" : "center", marginBottom: isMobile ? 16 : 24, gap:12 }}>
               <div>
-                <div style={{ fontSize:20, fontWeight:700, color:"#fff" }}>
+                <div style={{ fontSize: isMobile ? 17 : 20, fontWeight:700, color:"#fff" }}>
                   {lang?.flag} แปลเป็น {lang?.name} สำเร็จ!
                 </div>
-                <div style={{ fontSize:13, color:"#6a6a9a", marginTop:4 }}>{slides.length} สไลด์ · Font ในไฟล์: {lang?.pptxLatin}</div>
+                <div style={{ fontSize:12, color:"#6a6a9a", marginTop:4 }}>{slides.length} สไลด์ · Font: {lang?.pptxLatin}</div>
               </div>
-              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                <button style={S.btnSmall} onClick={() => { setStep(1); setTranslated([]); }}>← เลือกภาษาใหม่</button>
-                <button style={S.btnSmall} onClick={() => { setStep(0); setFile(null); setSlides([]); setTranslated([]); setLang(null); }}>อัปโหลดใหม่</button>
-                <button style={{ ...S.btn, opacity: busy ? 0.6 : 1 }} onClick={downloadPptx} disabled={busy}>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <button style={{ ...S.btnSmall, flex: isMobile ? 1 : undefined, textAlign:"center" }} onClick={() => { setStep(1); setTranslated([]); }}>← ภาษาใหม่</button>
+                <button style={{ ...S.btnSmall, flex: isMobile ? 1 : undefined, textAlign:"center" }} onClick={() => { setStep(0); setFile(null); setSlides([]); setTranslated([]); setLang(null); }}>อัปโหลดใหม่</button>
+                <button style={{ ...S.btn, opacity: busy ? 0.6 : 1, justifyContent:"center", width: isMobile ? "100%" : undefined }} onClick={downloadPptx} disabled={busy}>
                   {busy ? "⏳ กำลังสร้าง..." : "⬇️ ดาวน์โหลด PPTX"}
                 </button>
               </div>
@@ -764,7 +848,7 @@ Return exactly the same JSON structure but with the "text" values translated to 
             </div>
 
             {/* Side-by-side view */}
-            <div style={S.grid2}>
+            <div style={S.grid2(isMobile)}>
               {/* Original */}
               <div style={S.card}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
@@ -783,14 +867,45 @@ Return exactly the same JSON structure but with the "text" values translated to 
               {/* Translated */}
               <div style={S.card}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-                  <span style={S.tag("green")}>✓ {lang?.flag} แปลแล้ว</span>
+                  <span style={S.tag("green")}>✏️ {lang?.flag} แปลแล้ว (แก้ไขได้)</span>
                   <span style={{ fontSize:12, color:"#6a6a9a", fontFamily:`'${lang?.webFont}', sans-serif` }}>{lang?.webFont}</span>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
                   {currentTranslated?.paragraphs.map((p, i) => (
-                    <div key={i} style={{ padding:"10px 14px", background:"rgba(99,102,241,0.05)", borderRadius:10, border:"1px solid rgba(99,102,241,0.2)", ...S.textBlock(lang?.webFont, lang?.rtl) }}>
-                      {p.text}
-                    </div>
+                    <textarea
+                      key={i}
+                      value={p.text}
+                      rows={Math.max(2, Math.ceil(p.text.length / 60))}
+                      onChange={e => {
+                        const newText = e.target.value;
+                        setTranslated(prev => prev.map(s =>
+                          s.slideNum !== currentOriginal?.num ? s : {
+                            ...s,
+                            paragraphs: s.paragraphs.map((para, pi) =>
+                              pi === i ? { ...para, text: newText } : para
+                            )
+                          }
+                        ));
+                      }}
+                      style={{
+                        ...S.textBlock(lang?.webFont, lang?.rtl),
+                        padding:"10px 14px",
+                        background:"rgba(99,102,241,0.05)",
+                        borderRadius:10,
+                        border:"1px solid rgba(99,102,241,0.2)",
+                        resize:"vertical",
+                        outline:"none",
+                        width:"100%",
+                        boxSizing:"border-box",
+                        fontFamily:`'${lang?.webFont}', sans-serif`,
+                        fontSize:14,
+                        lineHeight:1.7,
+                        color:"#dde1f0",
+                        transition:"border-color 0.2s",
+                      }}
+                      onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
+                      onBlur={e => e.target.style.borderColor = "rgba(99,102,241,0.2)"}
+                    />
                   ))}
                 </div>
               </div>
@@ -808,10 +923,10 @@ Return exactly the same JSON structure but with the "text" values translated to 
       </main>
 
       {/* Footer */}
-      <footer style={{ borderTop:"1px solid #1a1a35", padding:"16px 28px", display:"flex", justifyContent:"center", gap:24, fontSize:12, color:"#3a3a6a" }}>
+      <footer style={{ borderTop:"1px solid #1a1a35", padding: isMobile ? "12px 16px" : "16px 28px", display:"flex", justifyContent:"center", flexWrap:"wrap", gap: isMobile ? 8 : 24, fontSize:12, color:"#3a3a6a", textAlign:"center" }}>
         <span>SlideTranslate · Powered by Claude AI</span>
-        <span>รองรับ {LANGS.length} ภาษาทั่วโลก</span>
-        <span>Font เปลี่ยนอัตโนมัติทั้ง Web & PPTX</span>
+        {!isMobile && <span>รองรับ {LANGS.length} ภาษาทั่วโลก</span>}
+        {!isMobile && <span>Font เปลี่ยนอัตโนมัติทั้ง Web & PPTX</span>}
       </footer>
     </div>
   );
