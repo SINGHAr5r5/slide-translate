@@ -203,7 +203,8 @@ export default function App() {
   const [fbUploadUrl, setFbUploadUrl] = useState(null);
   const [fbResultUrl, setFbResultUrl] = useState(null);
   const [showOriginal, setShowOriginal] = useState(false);
-  const [isPpt, setIsPpt] = useState(false);
+  const [fileType, setFileType] = useState("pptx"); // "pptx"|"ppt"|"docx"|"xlsx"|"image"
+  const [imageData, setImageData] = useState(null); // base64 for image preview
   const [engine, setEngine] = useState(() => { const e = localStorage.getItem("engine"); return e === "libre" ? "mymemory" : (e || "googletrans"); });
   const [claudeKey, setClaudeKey] = useState(() => localStorage.getItem("claude_api_key") || "");
   const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem("openai_api_key") || "");
@@ -212,6 +213,7 @@ export default function App() {
   const [srcLang, setSrcLang] = useState(() => localStorage.getItem("src_lang") || "en");
   const [showKey, setShowKey] = useState(false);
   const zipRef = useRef(null);
+  const xlsxWbRef = useRef(null); // SheetJS workbook ref
 
   // Load JSZip + CFB + Plus Jakarta Sans font
   useEffect(() => {
@@ -226,10 +228,12 @@ export default function App() {
       document.head.appendChild(s);
     };
 
-    if (window.JSZip && window.CFB) { setReady(true); return; }
+    if (window.JSZip && window.CFB && window.XLSX) { setReady(true); return; }
     loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js", () => {
-      if (window.CFB) { setReady(true); return; }
-      loadScript("https://cdn.jsdelivr.net/npm/cfb/dist/cfb.min.js", () => setReady(true));
+      loadScript("https://cdn.jsdelivr.net/npm/cfb/dist/cfb.min.js", () => {
+        if (window.XLSX) { setReady(true); return; }
+        loadScript("https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js", () => setReady(true));
+      });
     });
   }, []);
 
@@ -298,7 +302,61 @@ export default function App() {
     }));
   };
 
-  // ── Parse PPTX ──
+  // ── Parse DOCX ──
+  const parseDocx = async (f) => {
+    const ab = await f.arrayBuffer();
+    const zip = await window.JSZip.loadAsync(ab);
+    zipRef.current = zip;
+    const xml = await zip.file("word/document.xml").async("string");
+    const doc = new DOMParser().parseFromString(xml, "text/xml");
+    const WNS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const paras = [];
+    Array.from(doc.getElementsByTagNameNS(WNS, "p")).forEach((p, idx) => {
+      const text = Array.from(p.getElementsByTagNameNS(WNS, "t")).map(t => t.textContent).join("").trim();
+      if (text) paras.push({ idx, text });
+    });
+    return [{ num: 1, name: "Document", path: "word/document.xml", paras, xml }];
+  };
+
+  // ── Build translated DOCX XML ──
+  const buildDocxXml = (xml, transByIdx, lang) => {
+    const WNS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const doc = new DOMParser().parseFromString(xml, "text/xml");
+    const pNodes = Array.from(doc.getElementsByTagNameNS(WNS, "p"));
+    pNodes.forEach((p, idx) => {
+      const tr = transByIdx[idx];
+      if (!tr) return;
+      const tNodes = Array.from(p.getElementsByTagNameNS(WNS, "t"));
+      if (!tNodes.length) return;
+      tNodes[0].textContent = tr;
+      for (let i = 1; i < tNodes.length; i++) tNodes[i].textContent = "";
+    });
+    let out = new XMLSerializer().serializeToString(doc);
+    if (!out.startsWith("<?xml")) out = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + out;
+    return out;
+  };
+
+  // ── Parse XLSX ──
+  const parseXlsx = async (f) => {
+    if (!window.XLSX) throw new Error("กำลังโหลด SheetJS...");
+    const ab = await f.arrayBuffer();
+    const wb = window.XLSX.read(ab, { type: "array" });
+    xlsxWbRef.current = wb;
+    return wb.SheetNames.map((name, idx) => {
+      const sheet = wb.Sheets[name];
+      const paras = [];
+      Object.keys(sheet).forEach(addr => {
+        if (addr.startsWith("!")) return;
+        const cell = sheet[addr];
+        if ((cell.t === "s" || cell.t === "str") && cell.v && String(cell.v).trim()) {
+          paras.push({ idx: addr, text: String(cell.v) });
+        }
+      });
+      return { num: idx + 1, name, path: name, paras, xml: null };
+    }).filter(s => s.paras.length > 0);
+  };
+
+
   const parsePptx = async (f) => {
     const ab = await f.arrayBuffer();
     const zip = await window.JSZip.loadAsync(ab);
@@ -319,33 +377,49 @@ export default function App() {
   // ── Handle file ──
   const handleFile = async (f) => {
     if (!ready) return alert("กำลังโหลด library...");
-    const isPptFile = f?.name?.toLowerCase().endsWith(".ppt") && !f?.name?.toLowerCase().endsWith(".pptx");
-    if (!isPptFile && !f?.name?.toLowerCase().endsWith(".pptx")) return alert("กรุณาเลือกไฟล์ .pptx หรือ .ppt เท่านั้น");
+    const name = f?.name?.toLowerCase() || "";
+    let ftype = "";
+    if (name.endsWith(".pptx"))                             ftype = "pptx";
+    else if (name.endsWith(".ppt"))                         ftype = "ppt";
+    else if (name.endsWith(".docx"))                        ftype = "docx";
+    else if (name.endsWith(".xlsx") || name.endsWith(".xls")) ftype = "xlsx";
+    else if (/\.(jpe?g|png|webp|gif|bmp)$/.test(name))     ftype = "image";
+    else return alert("รองรับ .pptx .ppt .docx .xlsx .jpg .png เท่านั้น");
+
     setBusy(true);
-    setIsPpt(isPptFile);
-    setProgress({ pct: 30, msg: "กำลังอ่านไฟล์ PowerPoint..." });
+    setFileType(ftype);
+    setImageData(null);
+    setProgress({ pct: 20, msg: "กำลังอ่านไฟล์..." });
     try {
-      const parsed = isPptFile ? await parsePpt(f) : await parsePptx(f);
+      let parsed;
+      if (ftype === "pptx")       parsed = await parsePptx(f);
+      else if (ftype === "ppt")   parsed = await parsePpt(f);
+      else if (ftype === "docx")  parsed = await parseDocx(f);
+      else if (ftype === "xlsx")  parsed = await parseXlsx(f);
+      else {
+        // Image: read as base64, no text extraction yet
+        const b64 = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result);
+          r.onerror = rej;
+          r.readAsDataURL(f);
+        });
+        setImageData(b64);
+        setFile(f);
+        setSlides([{ num: 1, name: "Image", path: null, paras: [], xml: null }]);
+        setActiveSlide(0);
+        setStep(1);
+        setBusy(false);
+        setProgress({ pct: 0, msg: "" });
+        return;
+      }
       setFile(f);
       setSlides(parsed);
       setActiveSlide(0);
-
-      // Auto-detect source language from first slide's text
       const sampleText = parsed.slice(0, 3).flatMap(s => s.paras.map(p => p.text)).join(" ");
       const detected = detectLang(sampleText);
       setSrcLang(detected);
       localStorage.setItem("src_lang", detected);
-
-      if (fbEnabled && fbCfg.apiKey) {
-        setProgress({ pct: 70, msg: "กำลังอัปโหลดไป Firebase..." });
-        loadFirebase(fbCfg, async () => {
-          try {
-            const url = await fbUpload(f, `originals/${Date.now()}_${f.name}`);
-            setFbUploadUrl(url);
-          } catch (e) { console.warn("Firebase upload failed:", e.message); }
-        });
-      }
-
       setStep(1);
     } catch (e) {
       alert("เกิดข้อผิดพลาด: " + e.message);
@@ -357,16 +431,37 @@ export default function App() {
 
   // ── Translate ──
   const doTranslate = async () => {
-    if (!lang || !slides.length) return;
+    if (!lang) return;
     setBusy(true);
     setStep(2);
+
+    // Special path for images: OCR + translate in one AI call
+    if (fileType === "image") {
+      try {
+        setProgress({ pct: 30, msg: "อ่านรูปและแปลข้อความ..." });
+        const { originals, translated: tList } = await callImageTranslate(imageData, lang);
+        // Populate slides paras with OCR'd originals
+        setSlides([{ num: 1, name: "Image", path: null, xml: null, paras: originals.map((t, i) => ({ idx: i, text: t })) }]);
+        setTranslated([{ slideNum: 1, paragraphs: tList.map((t, i) => ({ idx: i, text: t })) }]);
+        setProgress({ pct: 100, msg: "เสร็จ!" });
+        setActiveSlide(0);
+        setStep(3);
+      } catch (e) {
+        alert("เกิดข้อผิดพลาด: " + e.message);
+        setStep(1);
+      } finally { setBusy(false); }
+      return;
+    }
+
+    if (!slides.length) { setBusy(false); return; }
     const BATCH = (engine === "mymemory" || engine === "googletrans") ? 10 : 5;
     const results = [];
     try {
       for (let i = 0; i < slides.length; i += BATCH) {
         const batch = slides.slice(i, i + BATCH);
         const pct = Math.round((i / slides.length) * 90);
-        setProgress({ pct, msg: `แปลสไลด์ ${i + 1}–${Math.min(i + BATCH, slides.length)} จาก ${slides.length}...` });
+        const unitLabel = fileType === "xlsx" ? "ชีต" : fileType === "docx" ? "ส่วน" : "สไลด์";
+        setProgress({ pct, msg: `แปล${unitLabel} ${i + 1}–${Math.min(i + BATCH, slides.length)} จาก ${slides.length}...` });
         const input = batch.map(s => ({ slideNum: s.num, paragraphs: s.paras }));
         let res;
         if (engine === "mymemory")        res = await callMyMemory(input, lang);
@@ -391,10 +486,51 @@ export default function App() {
 
   // ── Shared AI prompt builder ──
   const buildAIPrompt = (batchData, lang) =>
-    `You are a professional PowerPoint translator. Translate slide text to ${lang.eng} (${lang.name}).
+    `You are a professional document translator. Translate text to ${lang.eng} (${lang.name}).
 Rules: Return ONLY valid JSON (same structure), no markdown. Preserve numbers, symbols, URLs. Natural fluent translation.
 
 Input: ${JSON.stringify(batchData)}`;
+
+  // ── Image OCR + Translate ──
+  const callImageTranslate = async (base64, lang) => {
+    const prompt = `You are an OCR and translation expert. Look at this image, extract ALL visible text, then translate each text piece to ${lang.eng} (${lang.name}).
+Return ONLY valid JSON: { "results": [{"original": "...", "translated": "..."}] }
+No markdown. Preserve formatting symbols. If no text found, return { "results": [] }.`;
+
+    if (engine === "openai" || (!openaiKey && geminiKey)) {
+      // Use GPT-4o vision
+      if (!openaiKey) throw new Error("กรุณาใส่ OpenAI API Key สำหรับการแปลรูป");
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
+        body: JSON.stringify({ model: "gpt-4o", max_tokens: 4000, messages: [{ role: "user", content: [
+          { type: "image_url", image_url: { url: base64 } },
+          { type: "text", text: prompt }
+        ]}]})
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      const parsed = JSON.parse(data.choices[0].message.content.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, ""));
+      return { originals: parsed.results.map(r => r.original), translated: parsed.results.map(r => r.translated) };
+    } else {
+      // Use Gemini vision
+      if (!geminiKey) throw new Error("สำหรับ Image ต้องใช้ GPT-4o หรือ Gemini กด 🔑 ใน header เพื่อใส่ Key ก่อน");
+      const mimeType = base64.match(/data:(image\/[^;]+)/)?.[1] || "image/jpeg";
+      const b64data = base64.split(",")[1];
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [
+          { inlineData: { mimeType, data: b64data } },
+          { text: prompt }
+        ]}]})
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      const parsed = JSON.parse(data.candidates[0].content.parts[0].text.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, ""));
+      return { originals: parsed.results.map(r => r.original), translated: parsed.results.map(r => r.translated) };
+    }
+  };
 
   const callGroq = async (batchData, lang) => {
     if (!groqKey) throw new Error("กรุณาใส่ Groq API Key ก่อน (กด 🔑) — สมัครฟรีที่ groq.com");
@@ -479,14 +615,53 @@ Input: ${JSON.stringify(batchData)}`;
     })));
   };
 
-  // ── Download PPTX ──
-  const downloadPptx = async () => {
+  // ── Download file (routes by fileType) ──
+  const downloadFile = async () => {
     if (!lang) return;
     setBusy(true);
+    try {
+      if (fileType === "docx") {
+        const zip = zipRef.current;
+        const tMap = {};
+        translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; }); });
+        const newXml = buildDocxXml(slides[0].xml, tMap[1] || {}, lang);
+        zip.file("word/document.xml", newXml);
+        const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = `[${lang.code}] ${file.name}`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        return;
+      }
 
-    // .ppt → generate new .pptx via pptxgenjs
-    if (isPpt) {
-      try {
+      if (fileType === "xlsx") {
+        const wb = xlsxWbRef.current;
+        translated.forEach(s => {
+          const sheetName = slides.find(sl => sl.num === s.slideNum)?.name;
+          if (!sheetName || !wb.Sheets[sheetName]) return;
+          s.paragraphs.forEach(p => {
+            if (wb.Sheets[sheetName][p.idx]) wb.Sheets[sheetName][p.idx].v = p.text;
+          });
+        });
+        const out = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = `[${lang.code}] ${file.name.replace(/\.xls$/i, ".xlsx")}`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        return;
+      }
+
+      if (fileType === "image") {
+        // Download as plain text
+        const lines = translated[0]?.paragraphs.map((p, i) => `${i + 1}. ${p.text}`) || [];
+        const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = `[${lang.code}] ${file.name}.txt`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        return;
+      }
+
+      // PPTX / PPT
+      if (fileType === "ppt") {
         if (!window.PptxGenJS) {
           await new Promise((res, rej) => {
             const s = document.createElement("script");
@@ -497,62 +672,27 @@ Input: ${JSON.stringify(batchData)}`;
         }
         const pptx = new window.PptxGenJS();
         const tMap = {};
-        translated.forEach(s => {
-          tMap[s.slideNum] = {};
-          s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; });
-        });
+        translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; }); });
         for (const slide of slides) {
           const pSlide = pptx.addSlide();
-          const textItems = slide.paras.map((p, i) => ({
-            text: (tMap[slide.num]?.[p.idx] ?? p.text),
-            options: { breakLine: i < slide.paras.length - 1 },
-          }));
-          pSlide.addText(textItems, {
-            x: 0.3, y: 0.3, w: "94%", h: "94%",
-            fontSize: 20, fontFace: lang.pptxLatin,
-            color: "000000", valign: "top", wrap: true,
-            rtlMode: !!lang.rtl,
-            line: { type: "none" },
-            fill: { type: "none" },
-          });
+          const textItems = slide.paras.map((p, i) => ({ text: (tMap[slide.num]?.[p.idx] ?? p.text), options: { breakLine: i < slide.paras.length - 1 } }));
+          pSlide.addText(textItems, { x:0.3, y:0.3, w:"94%", h:"94%", fontSize:20, fontFace:lang.pptxLatin, color:"000000", valign:"top", wrap:true, rtlMode:!!lang.rtl, line:{type:"none"}, fill:{type:"none"} });
         }
-        const baseName = file.name.replace(/\.ppt$/i, ".pptx");
-        await pptx.writeFile({ fileName: `[${lang.code}] ${baseName}` });
-      } catch (e) {
-        alert("ดาวน์โหลดล้มเหลว: " + e.message);
-      } finally {
-        setBusy(false);
+        await pptx.writeFile({ fileName: `[${lang.code}] ${file.name.replace(/\.ppt$/i, ".pptx")}` });
+        return;
       }
-      return;
-    }
 
-    if (!zipRef.current) { setBusy(false); return; }
-    try {
+      // PPTX
       const zip = zipRef.current;
+      if (!zip) return;
       const tMap = {};
-      translated.forEach(s => {
-        tMap[s.slideNum] = {};
-        s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; });
-      });
+      translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; }); });
       for (const slide of slides) {
-        const newXml = buildXml(slide.xml, tMap[slide.num] || {}, lang);
-        zip.file(slide.path, newXml);
+        zip.file(slide.path, buildXml(slide.xml, tMap[slide.num] || {}, lang));
       }
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
-
-      if (fbEnabled && fbCfg.apiKey) {
-        loadFirebase(fbCfg, async () => {
-          try {
-            const fbFile = new File([blob], `[${lang.code}] ${file.name}`, { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
-            const url = await fbUpload(fbFile, `translated/${Date.now()}_[${lang.code}]_${file.name}`);
-            setFbResultUrl(url);
-          } catch (e) { console.warn("Firebase upload failed:", e); }
-        });
-      }
-
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `[${lang.code}] ${file.name}`; a.click();
+      const a = document.createElement("a"); a.href = url; a.download = `[${lang.code}] ${file.name}`; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) {
       alert("ดาวน์โหลดล้มเหลว: " + e.message);
@@ -731,12 +871,12 @@ Input: ${JSON.stringify(batchData)}`;
               onDrop={onDrop}
               onClick={() => document.getElementById("fileInput").click()}
             >
-              <div style={{ fontSize: isMobile ? 44 : 56 }}>📊</div>
-              <div style={{ fontSize: isMobile ? 17 : 20, fontWeight:700, color:"#fff" }}>{isMobile ? "แตะเพื่อเลือกไฟล์" : "วางไฟล์ PowerPoint ที่นี่"}</div>
-              <div style={{ fontSize: isMobile ? 12 : 14, color:"#6a6a9a" }}>รองรับไฟล์ .pptx / .ppt</div>
-              <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"center", marginTop:8 }}>
-                {["ภาษาไทย", "中文", "日本語", "한국어", "ລາວ", "30+ ภาษา"].map(t => (
-                  <span key={t} style={S.tag("blue")}>{t}</span>
+              <div style={{ fontSize: isMobile ? 44 : 56 }}>📄</div>
+              <div style={{ fontSize: isMobile ? 17 : 20, fontWeight:700, color:"#fff" }}>{isMobile ? "แตะเพื่อเลือกไฟล์" : "วางไฟล์ที่นี่"}</div>
+              <div style={{ fontSize: isMobile ? 12 : 14, color:"#6a6a9a" }}>รองรับ .pptx .ppt .docx .xlsx .jpg .png</div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center", marginTop:8 }}>
+                {[["blue","📊 PowerPoint"],["purple","📝 Word"],["green","📗 Excel"],["blue","🖼️ Image"]].map(([c,t]) => (
+                  <span key={t} style={S.tag(c)}>{t}</span>
                 ))}
               </div>
               {busy && (
@@ -746,7 +886,7 @@ Input: ${JSON.stringify(batchData)}`;
                 </div>
               )}
             </div>
-            <input id="fileInput" type="file" accept=".pptx,.ppt" style={{ display:"none" }} onChange={e => handleFile(e.target.files[0])} />
+            <input id="fileInput" type="file" accept=".pptx,.ppt,.docx,.xlsx,.jpg,.jpeg,.png,.webp" style={{ display:"none" }} onChange={e => handleFile(e.target.files[0])} />
 
             <div style={{ marginTop:16, padding:14, background:"rgba(99,102,241,0.05)", borderRadius:12, border:"1px solid rgba(99,102,241,0.15)", fontSize: isMobile ? 12 : 13, color:"#8a8ac0", lineHeight:1.7 }}>
               <strong style={{ color:"#a5a5ff" }}>💡 หมายเหตุเรื่อง Font</strong><br />
@@ -854,22 +994,32 @@ Input: ${JSON.stringify(batchData)}`;
                 <div style={{ fontSize: isMobile ? 17 : 20, fontWeight:700, color:"#fff" }}>
                   {lang?.flag} แปลเป็น {lang?.name} สำเร็จ!
                 </div>
-                <div style={{ fontSize:12, color:"#6a6a9a", marginTop:4 }}>{slides.length} สไลด์ · Font: {lang?.pptxLatin}</div>
+                <div style={{ fontSize:12, color:"#6a6a9a", marginTop:4 }}>
+                  {fileType === "image" ? "🖼️ Image" : fileType === "docx" ? `📝 ${slides[0]?.paras.length} ย่อหน้า` : fileType === "xlsx" ? `📗 ${slides.length} ชีต` : `📊 ${slides.length} สไลด์`} · Font: {lang?.pptxLatin}
+                </div>
               </div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 <button style={{ ...S.btnSmall, flex: isMobile ? 1 : undefined, textAlign:"center" }} onClick={() => { setStep(1); setTranslated([]); }}>← ภาษาใหม่</button>
                 <button style={{ ...S.btnSmall, flex: isMobile ? 1 : undefined, textAlign:"center" }} onClick={() => { setStep(0); setFile(null); setSlides([]); setTranslated([]); setLang(null); }}>อัปโหลดใหม่</button>
-                <button style={{ ...S.btn, opacity: busy ? 0.6 : 1, justifyContent:"center", width: isMobile ? "100%" : undefined }} onClick={downloadPptx} disabled={busy}>
-                  {busy ? "⏳ กำลังสร้าง..." : "⬇️ ดาวน์โหลด PPTX"}
+                <button style={{ ...S.btn, opacity: busy ? 0.6 : 1, justifyContent:"center", width: isMobile ? "100%" : undefined }} onClick={downloadFile} disabled={busy}>
+                  {busy ? "⏳ กำลังสร้าง..." : fileType === "image" ? "⬇️ บันทึกข้อความ .txt" : fileType === "docx" ? "⬇️ ดาวน์โหลด DOCX" : fileType === "xlsx" ? "⬇️ ดาวน์โหลด XLSX" : "⬇️ ดาวน์โหลด PPTX"}
                 </button>
               </div>
             </div>
 
-            {/* Slide tabs */}
+            {/* Image preview (only for image fileType) */}
+            {fileType === "image" && imageData && (
+              <div style={{ ...S.card, marginBottom:16 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"#8b8bff", marginBottom:10 }}>🖼️ ต้นฉบับ</div>
+                <img src={imageData} alt="original" style={{ maxWidth:"100%", maxHeight:400, objectFit:"contain", borderRadius:10, border:"1px solid #1a1a35" }} />
+              </div>
+            )}
+
+            {/* Slide/Sheet/Image tabs */}
             <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:8, marginBottom:16 }}>
               {slides.map((s, i) => (
                 <button key={i} style={S.slideTab(activeSlide === i)} onClick={() => setActiveSlide(i)}>
-                  Slide {s.num}
+                  {fileType === "xlsx" ? `📗 ${s.name}` : fileType === "image" ? "🖼️ Image" : `Slide ${s.num}`}
                 </button>
               ))}
             </div>
