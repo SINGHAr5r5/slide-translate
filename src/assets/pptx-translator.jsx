@@ -1,0 +1,818 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+// ── Language registry ──────────────────────────────────────────────
+const LANGS = [
+  { code:"th",     name:"ไทย",           flag:"🇹🇭", eng:"Thai",                webFont:"Sarabun",              gfont:"Sarabun:wght@400;600;700",               pptxLatin:"TH Sarabun New",   pptxEA:"TH Sarabun New" },
+  { code:"zh-CN",  name:"中文 (简体)",    flag:"🇨🇳", eng:"Chinese Simplified",   webFont:"Noto Sans SC",         gfont:"Noto+Sans+SC:wght@400;700",              pptxLatin:"Microsoft YaHei", pptxEA:"Microsoft YaHei" },
+  { code:"zh-TW",  name:"中文 (繁體)",    flag:"🇹🇼", eng:"Chinese Traditional",  webFont:"Noto Sans TC",         gfont:"Noto+Sans+TC:wght@400;700",              pptxLatin:"Microsoft JhengHei",pptxEA:"Microsoft JhengHei" },
+  { code:"zh-yue", name:"粵語",           flag:"🇭🇰", eng:"Cantonese",            webFont:"Noto Sans HK",         gfont:"Noto+Sans+HK:wght@400;700",              pptxLatin:"Microsoft YaHei", pptxEA:"Microsoft YaHei" },
+  { code:"lo",     name:"ລາວ",           flag:"🇱🇦", eng:"Lao",                  webFont:"Noto Sans Lao",        gfont:"Noto+Sans+Lao:wght@400;700",             pptxLatin:"DokChampa",       pptxEA:"DokChampa" },
+  { code:"ja",     name:"日本語",         flag:"🇯🇵", eng:"Japanese",             webFont:"Noto Sans JP",         gfont:"Noto+Sans+JP:wght@400;700",              pptxLatin:"MS Gothic",        pptxEA:"MS Gothic" },
+  { code:"ko",     name:"한국어",         flag:"🇰🇷", eng:"Korean",               webFont:"Noto Sans KR",         gfont:"Noto+Sans+KR:wght@400;700",              pptxLatin:"Malgun Gothic",   pptxEA:"Malgun Gothic" },
+  { code:"ar",     name:"العربية",        flag:"🇸🇦", eng:"Arabic",               webFont:"Noto Sans Arabic",     gfont:"Noto+Sans+Arabic:wght@400;700",          pptxLatin:"Arial",           pptxEA:"Arial",  rtl:true },
+  { code:"hi",     name:"हिन्दी",         flag:"🇮🇳", eng:"Hindi",                webFont:"Noto Sans Devanagari", gfont:"Noto+Sans+Devanagari:wght@400;700",      pptxLatin:"Mangal",          pptxEA:"Mangal" },
+  { code:"km",     name:"ខ្មែរ",          flag:"🇰🇭", eng:"Khmer",                webFont:"Noto Sans Khmer",      gfont:"Noto+Sans+Khmer:wght@400;700",           pptxLatin:"Khmer UI",        pptxEA:"Khmer UI" },
+  { code:"my",     name:"မြန်မာ",         flag:"🇲🇲", eng:"Burmese",              webFont:"Noto Sans Myanmar",    gfont:"Noto+Sans+Myanmar:wght@400;700",         pptxLatin:"Myanmar Text",    pptxEA:"Myanmar Text" },
+  { code:"en",     name:"English",        flag:"🇬🇧", eng:"English",              webFont:"Inter",                gfont:"Inter:wght@400;700",                     pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"fr",     name:"Français",       flag:"🇫🇷", eng:"French",               webFont:"Inter",                gfont:"Inter:wght@400;700",                     pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"de",     name:"Deutsch",        flag:"🇩🇪", eng:"German",               webFont:"Inter",                gfont:"Inter:wght@400;700",                     pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"es",     name:"Español",        flag:"🇪🇸", eng:"Spanish",              webFont:"Inter",                gfont:"Inter:wght@400;700",                     pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"ru",     name:"Русский",        flag:"🇷🇺", eng:"Russian",              webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"he",     name:"עברית",          flag:"🇮🇱", eng:"Hebrew",               webFont:"Noto Sans Hebrew",     gfont:"Noto+Sans+Hebrew:wght@400;700",          pptxLatin:"Arial Hebrew",    pptxEA:"Arial Hebrew", rtl:true },
+  { code:"fa",     name:"فارسی",          flag:"🇮🇷", eng:"Persian",              webFont:"Noto Sans Arabic",     gfont:"Noto+Nastaliq+Urdu:wght@400;700",        pptxLatin:"Arial",           pptxEA:"Arial", rtl:true },
+  { code:"ur",     name:"اردو",           flag:"🇵🇰", eng:"Urdu",                 webFont:"Noto Nastaliq Urdu",   gfont:"Noto+Nastaliq+Urdu:wght@400;700",        pptxLatin:"Arial",           pptxEA:"Arial", rtl:true },
+  { code:"vi",     name:"Tiếng Việt",     flag:"🇻🇳", eng:"Vietnamese",           webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Arial",           pptxEA:"Arial" },
+  { code:"id",     name:"Indonesia",      flag:"🇮🇩", eng:"Indonesian",           webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"ms",     name:"Melayu",         flag:"🇲🇾", eng:"Malay",                webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"pt",     name:"Português",      flag:"🇧🇷", eng:"Portuguese",           webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"it",     name:"Italiano",       flag:"🇮🇹", eng:"Italian",              webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"tr",     name:"Türkçe",         flag:"🇹🇷", eng:"Turkish",              webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"pl",     name:"Polski",         flag:"🇵🇱", eng:"Polish",               webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"uk",     name:"Українська",     flag:"🇺🇦", eng:"Ukrainian",            webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"nl",     name:"Nederlands",     flag:"🇳🇱", eng:"Dutch",                webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"sv",     name:"Svenska",        flag:"🇸🇪", eng:"Swedish",              webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+  { code:"bn",     name:"বাংলা",           flag:"🇧🇩", eng:"Bengali",              webFont:"Noto Sans Bengali",    gfont:"Noto+Sans+Bengali:wght@400;700",         pptxLatin:"Vrinda",          pptxEA:"Vrinda" },
+  { code:"ta",     name:"தமிழ்",           flag:"🇱🇰", eng:"Tamil",                webFont:"Noto Sans Tamil",      gfont:"Noto+Sans+Tamil:wght@400;700",           pptxLatin:"Latha",           pptxEA:"Latha" },
+  { code:"ne",     name:"नेपाली",          flag:"🇳🇵", eng:"Nepali",               webFont:"Noto Sans Devanagari", gfont:"Noto+Sans+Devanagari:wght@400;700",      pptxLatin:"Mangal",          pptxEA:"Mangal" },
+  { code:"si",     name:"සිංහල",           flag:"🇱🇰", eng:"Sinhala",              webFont:"Noto Sans Sinhala",    gfont:"Noto+Sans+Sinhala:wght@400;700",         pptxLatin:"Iskoola Pota",    pptxEA:"Iskoola Pota" },
+  { code:"sw",     name:"Kiswahili",      flag:"🇰🇪", eng:"Swahili",              webFont:"Noto Sans",            gfont:"Noto+Sans:wght@400;700",                 pptxLatin:"Calibri",         pptxEA:"Calibri" },
+];
+
+// ── Inline styles ──────────────────────────────────────────────────
+const S = {
+  app: { minHeight:"100vh", background:"#070711", color:"#dde1f0", fontFamily:"'Plus Jakarta Sans', sans-serif", display:"flex", flexDirection:"column" },
+  header: { background:"rgba(10,10,25,0.95)", borderBottom:"1px solid #1a1a35", padding:"0 28px", height:60, display:"flex", alignItems:"center", justifyContent:"space-between", backdropFilter:"blur(12px)", position:"sticky", top:0, zIndex:100 },
+  logo: { display:"flex", alignItems:"center", gap:10, fontWeight:700, fontSize:18, letterSpacing:-0.5, color:"#fff" },
+  logoDot: { width:10, height:10, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)" },
+  main: { flex:1, maxWidth:1100, width:"100%", margin:"0 auto", padding:"32px 24px" },
+  stepper: { display:"flex", alignItems:"center", gap:0, marginBottom:40 },
+  stepItem: (active, done) => ({ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:100, fontSize:13, fontWeight:600, color: done ? "#6366f1" : active ? "#fff" : "#4a4a7a", background: active ? "rgba(99,102,241,0.15)" : "transparent", border: active ? "1px solid rgba(99,102,241,0.4)" : "1px solid transparent", transition:"all 0.3s" }),
+  stepNum: (active, done) => ({ width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, background: done ? "#6366f1" : active ? "rgba(99,102,241,0.8)" : "#1e1e3a", color:"#fff", flexShrink:0 }),
+  stepLine: { flex:1, height:1, background:"#1e1e3a", maxWidth:40 },
+  card: { background:"#0e0e1e", border:"1px solid #1a1a35", borderRadius:16, padding:28 },
+  uploadZone: (drag) => ({ border: `2px dashed ${drag?"#6366f1":"#2a2a50"}`, borderRadius:16, padding:"64px 32px", display:"flex", flexDirection:"column", alignItems:"center", gap:16, cursor:"pointer", transition:"all 0.2s", background: drag?"rgba(99,102,241,0.05)":"rgba(14,14,30,0.5)", textAlign:"center" }),
+  btn: { background:"linear-gradient(135deg,#6366f1,#8b5cf6)", color:"#fff", border:"none", borderRadius:10, padding:"12px 28px", fontSize:14, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:8, transition:"opacity 0.2s" },
+  btnOutline: { background:"transparent", color:"#6366f1", border:"1px solid #6366f1", borderRadius:10, padding:"11px 24px", fontSize:14, fontWeight:600, cursor:"pointer", transition:"all 0.2s" },
+  btnSmall: { background:"rgba(99,102,241,0.15)", color:"#8b8bff", border:"1px solid rgba(99,102,241,0.3)", borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:600, cursor:"pointer" },
+  input: { width:"100%", background:"#0a0a1a", border:"1px solid #2a2a50", borderRadius:10, padding:"11px 14px", fontSize:14, color:"#dde1f0", outline:"none", boxSizing:"border-box" },
+  tag: (c) => ({ display:"inline-block", padding:"3px 10px", borderRadius:100, fontSize:11, fontWeight:600, background: c==="green"?"rgba(16,185,129,0.15)": c==="blue"?"rgba(99,102,241,0.15)":"rgba(168,85,247,0.15)", color: c==="green"?"#10b981": c==="blue"?"#8b8bff":"#c084fc" }),
+  progress: { background:"#1a1a35", borderRadius:100, height:6, overflow:"hidden" },
+  progressBar: (pct) => ({ height:"100%", width:`${pct}%`, background:"linear-gradient(90deg,#6366f1,#a855f7)", transition:"width 0.5s", borderRadius:100 }),
+  slideTab: (active) => ({ padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer", borderRadius:8, color: active?"#fff":"#6a6a9a", background: active?"rgba(99,102,241,0.2)":"transparent", border: active?"1px solid rgba(99,102,241,0.4)":"1px solid transparent", whiteSpace:"nowrap", transition:"all 0.2s" }),
+  langCard: (sel) => ({ border:`1px solid ${sel?"#6366f1":"#1e1e3a"}`, borderRadius:12, padding:"12px 14px", cursor:"pointer", display:"flex", alignItems:"center", gap:10, background: sel?"rgba(99,102,241,0.1)":"#0e0e1e", transition:"all 0.15s" }),
+  fbField: { display:"flex", flexDirection:"column", gap:6, flex:1 },
+  label: { fontSize:12, fontWeight:600, color:"#6a6a9a", letterSpacing:0.5 },
+  grid2: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:28 },
+  textBlock: (font, rtl) => ({ fontFamily:`'${font}', sans-serif`, direction: rtl?"rtl":"ltr", textAlign: rtl?"right":"left", lineHeight:1.8, fontSize:15, color:"#dde1f0" }),
+};
+
+// ── Language detector (Unicode script ranges) ──────────────────────
+function detectLang(text) {
+  if (!text || text.length < 5) return "en";
+  const score = {};
+  const add = (k) => { score[k] = (score[k] || 0) + 1; };
+  for (const ch of text) {
+    const cp = ch.codePointAt(0);
+    if (cp >= 0x0E00 && cp <= 0x0E7F) add("th");
+    else if (cp >= 0x4E00 && cp <= 0x9FFF) add("zh");
+    else if ((cp >= 0x3040 && cp <= 0x309F) || (cp >= 0x30A0 && cp <= 0x30FF)) add("ja");
+    else if (cp >= 0xAC00 && cp <= 0xD7AF) add("ko");
+    else if (cp >= 0x0600 && cp <= 0x06FF) add("ar");
+    else if (cp >= 0x0400 && cp <= 0x04FF) add("ru");
+    else if (cp >= 0x0900 && cp <= 0x097F) add("hi");
+    else if (cp >= 0x0E80 && cp <= 0x0EFF) add("lo");
+    else if (cp >= 0x1780 && cp <= 0x17FF) add("km");
+    else if (cp >= 0x1000 && cp <= 0x109F) add("my");
+    else if (cp >= 0x0590 && cp <= 0x05FF) add("he");
+    else if (cp >= 0x0980 && cp <= 0x09FF) add("bn");
+  }
+  const best = Object.entries(score).sort((a, b) => b[1] - a[1])[0];
+  if (!best || best[1] < text.replace(/\s/g, "").length * 0.1) return "en";
+  return best[0];
+}
+
+// ── PPTX helpers ───────────────────────────────────────────────────
+const NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+
+function extractParas(xml) {
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+  const result = [];
+  Array.from(doc.getElementsByTagNameNS(NS, "p")).forEach((p, idx) => {
+    const text = Array.from(p.getElementsByTagNameNS(NS, "t")).map(t => t.textContent).join("").trim();
+    if (text) result.push({ idx, text });
+  });
+  return result;
+}
+
+function buildXml(xml, transByIdx, lang) {
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+
+  // Inject translations
+  const pNodes = Array.from(doc.getElementsByTagNameNS(NS, "p"));
+  pNodes.forEach((p, idx) => {
+    const tr = transByIdx[idx];
+    if (!tr) return;
+    const tNodes = Array.from(p.getElementsByTagNameNS(NS, "t"));
+    if (!tNodes.length) return;
+    tNodes[0].textContent = tr;
+    for (let i = 1; i < tNodes.length; i++) tNodes[i].textContent = "";
+  });
+
+  // Change fonts
+  ["rPr", "defRPr", "endParaRPr"].forEach(tag => {
+    Array.from(doc.getElementsByTagNameNS(NS, tag)).forEach(el => {
+      Array.from(el.getElementsByTagNameNS(NS, "latin")).forEach(n => n.setAttribute("typeface", lang.pptxLatin));
+      const eaArr = Array.from(el.getElementsByTagNameNS(NS, "ea"));
+      if (eaArr.length) eaArr.forEach(n => n.setAttribute("typeface", lang.pptxEA));
+      if (lang.rtl) {
+        Array.from(el.getElementsByTagNameNS(NS, "cs")).forEach(n => n.setAttribute("typeface", lang.pptxLatin));
+      }
+    });
+  });
+
+  let out = new XMLSerializer().serializeToString(doc);
+  if (!out.startsWith("<?xml")) out = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + out;
+  return out;
+}
+
+// ── Firebase helpers ───────────────────────────────────────────────
+function loadFirebase(cfg, cb) {
+  if (window._fbLoaded) { cb(); return; }
+  const load = (src, onload) => { const s = document.createElement("script"); s.src = src; s.onload = onload; document.head.appendChild(s); };
+  load("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js", () => {
+    load("https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js", () => {
+      window.firebase.initializeApp(cfg);
+      window._fbLoaded = true;
+      cb();
+    });
+  });
+}
+
+async function fbUpload(file, path) {
+  const ref = window.firebase.storage().ref(path);
+  await ref.put(file);
+  return await ref.getDownloadURL();
+}
+
+// ── Main component ─────────────────────────────────────────────────
+export default function App() {
+  const [ready, setReady] = useState(false);
+  const [step, setStep] = useState(0);           // 0=upload 1=lang 2=translating 3=done
+  const [file, setFile] = useState(null);
+  const [slides, setSlides] = useState([]);
+  const [lang, setLang] = useState(null);
+  const [translated, setTranslated] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState({ pct: 0, msg: "" });
+  const [langQ, setLangQ] = useState("");
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [drag, setDrag] = useState(false);
+  const [showFb, setShowFb] = useState(false);
+  const [fbCfg, setFbCfg] = useState({ apiKey:"", authDomain:"", projectId:"", storageBucket:"", messagingSenderId:"", appId:"" });
+  const [fbEnabled, setFbEnabled] = useState(false);
+  const [fbUploadUrl, setFbUploadUrl] = useState(null);
+  const [fbResultUrl, setFbResultUrl] = useState(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [isPpt, setIsPpt] = useState(false);
+  const [engine, setEngine] = useState(() => { const e = localStorage.getItem("engine"); return e === "libre" ? "mymemory" : (e || "mymemory"); });
+  const [claudeKey, setClaudeKey] = useState(() => localStorage.getItem("claude_api_key") || "");
+  const [srcLang, setSrcLang] = useState(() => localStorage.getItem("src_lang") || "en");
+  const [showKey, setShowKey] = useState(false);
+  const zipRef = useRef(null);
+
+  // Load JSZip + CFB + Plus Jakarta Sans font
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap";
+    document.head.appendChild(link);
+
+    const loadScript = (src, onload) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = onload;
+      document.head.appendChild(s);
+    };
+
+    if (window.JSZip && window.CFB) { setReady(true); return; }
+    loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js", () => {
+      if (window.CFB) { setReady(true); return; }
+      loadScript("https://cdn.jsdelivr.net/npm/cfb/dist/cfb.min.js", () => setReady(true));
+    });
+  }, []);
+
+  // Load Google Font when language selected
+  useEffect(() => {
+    if (!lang) return;
+    const id = `gf-${lang.code}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${lang.gfont}&display=swap`;
+    document.head.appendChild(link);
+  }, [lang]);
+
+  // ── Parse PPT (binary OLE format) ──
+  const parsePpt = async (f) => {
+    if (!window.CFB) throw new Error("กำลังโหลด library กรุณาลองใหม่");
+    const ab = await f.arrayBuffer();
+    const cfb = window.CFB.read(new Uint8Array(ab), { type: "array" });
+    const entry = window.CFB.find(cfb, "PowerPoint Document");
+    if (!entry) throw new Error("ไม่พบข้อมูล PowerPoint ในไฟล์นี้");
+
+    const buf = entry.content;
+    const slides = [];
+    let currentTexts = null;
+    let i = 0;
+
+    while (i < buf.length - 8) {
+      const recVer = buf[i] & 0x0F;
+      const recType = buf[i + 2] | (buf[i + 3] << 8);
+      const recLen = (buf[i + 4] | (buf[i + 5] << 8) | (buf[i + 6] << 16) | (buf[i + 7] << 24)) >>> 0;
+
+      if (recLen > buf.length) { i++; continue; }
+
+      if (recVer === 0xF && recType === 1006) {
+        // SlideContainer — new slide
+        if (currentTexts !== null && currentTexts.length > 0) slides.push(currentTexts);
+        currentTexts = [];
+        i += 8;
+      } else if (recType === 4000 && recLen > 0) {
+        // TextCharsAtom — UTF-16LE
+        const text = new TextDecoder("utf-16le").decode(buf.slice(i + 8, i + 8 + recLen)).replace(/\r/g, "").trim();
+        if (text && currentTexts !== null) currentTexts.push(text);
+        i += 8 + recLen;
+      } else if (recType === 4008 && recLen > 0) {
+        // TextBytesAtom — Latin1
+        let text = "";
+        for (let j = 0; j < recLen; j++) text += String.fromCharCode(buf[i + 8 + j]);
+        text = text.trim();
+        if (text && currentTexts !== null) currentTexts.push(text);
+        i += 8 + recLen;
+      } else if (recVer === 0xF) {
+        i += 8; // Enter other containers
+      } else {
+        i += 8 + recLen;
+      }
+    }
+
+    if (currentTexts && currentTexts.length > 0) slides.push(currentTexts);
+    if (slides.length === 0) throw new Error("ไม่พบข้อความในไฟล์ .ppt นี้");
+
+    return slides.map((texts, idx) => ({
+      num: idx + 1, path: null, xml: null,
+      paras: texts.map((text, pidx) => ({ idx: pidx, text })),
+    }));
+  };
+
+  // ── Parse PPTX ──
+  const parsePptx = async (f) => {
+    const ab = await f.arrayBuffer();
+    const zip = await window.JSZip.loadAsync(ab);
+    zipRef.current = zip;
+    const names = Object.keys(zip.files)
+      .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+      .sort((a, b) => parseInt(a.match(/(\d+)/)[1]) - parseInt(b.match(/(\d+)/)[1]));
+    const result = [];
+    for (const path of names) {
+      const xml = await zip.file(path).async("string");
+      const paras = extractParas(xml);
+      const num = parseInt(path.match(/slide(\d+)/)[1]);
+      result.push({ num, path, paras, xml });
+    }
+    return result;
+  };
+
+  // ── Handle file ──
+  const handleFile = async (f) => {
+    if (!ready) return alert("กำลังโหลด library...");
+    const isPptFile = f?.name?.toLowerCase().endsWith(".ppt") && !f?.name?.toLowerCase().endsWith(".pptx");
+    if (!isPptFile && !f?.name?.toLowerCase().endsWith(".pptx")) return alert("กรุณาเลือกไฟล์ .pptx หรือ .ppt เท่านั้น");
+    setBusy(true);
+    setIsPpt(isPptFile);
+    setProgress({ pct: 30, msg: "กำลังอ่านไฟล์ PowerPoint..." });
+    try {
+      const parsed = isPptFile ? await parsePpt(f) : await parsePptx(f);
+      setFile(f);
+      setSlides(parsed);
+      setActiveSlide(0);
+
+      // Auto-detect source language from first slide's text
+      const sampleText = parsed.slice(0, 3).flatMap(s => s.paras.map(p => p.text)).join(" ");
+      const detected = detectLang(sampleText);
+      setSrcLang(detected);
+      localStorage.setItem("src_lang", detected);
+
+      if (fbEnabled && fbCfg.apiKey) {
+        setProgress({ pct: 70, msg: "กำลังอัปโหลดไป Firebase..." });
+        loadFirebase(fbCfg, async () => {
+          try {
+            const url = await fbUpload(f, `originals/${Date.now()}_${f.name}`);
+            setFbUploadUrl(url);
+          } catch (e) { console.warn("Firebase upload failed:", e.message); }
+        });
+      }
+
+      setStep(1);
+    } catch (e) {
+      alert("เกิดข้อผิดพลาด: " + e.message);
+    } finally {
+      setBusy(false);
+      setProgress({ pct: 0, msg: "" });
+    }
+  };
+
+  // ── Translate ──
+  const doTranslate = async () => {
+    if (!lang || !slides.length) return;
+    setBusy(true);
+    setStep(2);
+    const BATCH = 3;
+    const results = [];
+    try {
+      for (let i = 0; i < slides.length; i += BATCH) {
+        const batch = slides.slice(i, i + BATCH);
+        const pct = Math.round((i / slides.length) * 90);
+        setProgress({ pct, msg: `แปลสไลด์ ${i + 1}–${Math.min(i + BATCH, slides.length)} จาก ${slides.length}...` });
+
+        const input = batch.map(s => ({ slideNum: s.num, paragraphs: s.paras }));
+        const res = engine === "mymemory" ? await callMyMemory(input, lang) : await callClaude(input, lang);
+        results.push(...res);
+      }
+      setTranslated(results);
+      setProgress({ pct: 100, msg: "เสร็จสิ้น!" });
+      setActiveSlide(0);
+      setStep(3);
+    } catch (e) {
+      alert("เกิดข้อผิดพลาด: " + e.message);
+      setStep(1);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const callClaude = async (batchData, lang) => {
+    const prompt = `You are a professional translator. Translate the PowerPoint slide text to ${lang.eng} (${lang.name}).
+Return ONLY a valid JSON array — no markdown fences, no explanation.
+
+Input JSON:
+${JSON.stringify(batchData)}
+
+Return exactly the same JSON structure but with the "text" values translated to ${lang.eng}. Preserve any numbers, URLs, or formatting symbols.`;
+
+    if (!claudeKey) throw new Error("กรุณาใส่ Claude API Key ก่อน");
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": claudeKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5-20251001",
+        max_tokens: 4000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const raw = data.content[0].text.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, "");
+    return JSON.parse(raw);
+  };
+
+  const callMyMemory = async (batchData, lang) => {
+    const MM_MAP = { "zh-CN":"zh-CN", "zh-TW":"zh-TW", "zh-yue":"zh-CN" };
+    const target = MM_MAP[lang.code] || lang.code;
+    const results = [];
+    for (const slideData of batchData) {
+      const paragraphs = [];
+      for (const p of slideData.paragraphs) {
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(p.text)}&langpair=${srcLang}|${target}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`MyMemory HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.responseStatus !== 200) throw new Error(data.responseDetails || "MyMemory error");
+        paragraphs.push({ idx: p.idx, text: data.responseData.translatedText });
+      }
+      results.push({ slideNum: slideData.slideNum, paragraphs });
+    }
+    return results;
+  };
+
+  // ── Download PPTX ──
+  const downloadPptx = async () => {
+    if (!lang) return;
+    setBusy(true);
+
+    // .ppt → generate new .pptx via pptxgenjs
+    if (isPpt) {
+      try {
+        if (!window.PptxGenJS) {
+          await new Promise((res, rej) => {
+            const s = document.createElement("script");
+            s.src = "https://cdn.jsdelivr.net/npm/pptxgenjs/dist/pptxgen.bundle.js";
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+          });
+        }
+        const pptx = new window.PptxGenJS();
+        const tMap = {};
+        translated.forEach(s => {
+          tMap[s.slideNum] = {};
+          s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; });
+        });
+        for (const slide of slides) {
+          const pSlide = pptx.addSlide();
+          const textItems = slide.paras.map((p, i) => ({
+            text: (tMap[slide.num]?.[p.idx] ?? p.text),
+            options: { breakLine: i < slide.paras.length - 1 },
+          }));
+          pSlide.addText(textItems, {
+            x: 0.3, y: 0.3, w: "94%", h: "94%",
+            fontSize: 20, fontFace: lang.pptxLatin,
+            color: "000000", valign: "top", wrap: true,
+            rtlMode: !!lang.rtl,
+            line: { type: "none" },
+            fill: { type: "none" },
+          });
+        }
+        const baseName = file.name.replace(/\.ppt$/i, ".pptx");
+        await pptx.writeFile({ fileName: `[${lang.code}] ${baseName}` });
+      } catch (e) {
+        alert("ดาวน์โหลดล้มเหลว: " + e.message);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!zipRef.current) { setBusy(false); return; }
+    try {
+      const zip = zipRef.current;
+      const tMap = {};
+      translated.forEach(s => {
+        tMap[s.slideNum] = {};
+        s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; });
+      });
+      for (const slide of slides) {
+        const newXml = buildXml(slide.xml, tMap[slide.num] || {}, lang);
+        zip.file(slide.path, newXml);
+      }
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+
+      if (fbEnabled && fbCfg.apiKey) {
+        loadFirebase(fbCfg, async () => {
+          try {
+            const fbFile = new File([blob], `[${lang.code}] ${file.name}`, { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+            const url = await fbUpload(fbFile, `translated/${Date.now()}_[${lang.code}]_${file.name}`);
+            setFbResultUrl(url);
+          } catch (e) { console.warn("Firebase upload failed:", e); }
+        });
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `[${lang.code}] ${file.name}`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      alert("ดาวน์โหลดล้มเหลว: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Drag & Drop ──
+  const onDragOver = (e) => { e.preventDefault(); setDrag(true); };
+  const onDragLeave = () => setDrag(false);
+  const onDrop = useCallback((e) => { e.preventDefault(); setDrag(false); handleFile(e.dataTransfer.files[0]); }, [ready, fbEnabled, fbCfg]);
+
+  // ── Filtered languages ──
+  const filteredLangs = langQ
+    ? LANGS.filter(l => l.name.toLowerCase().includes(langQ.toLowerCase()) || l.eng.toLowerCase().includes(langQ.toLowerCase()) || l.code.includes(langQ.toLowerCase()))
+    : LANGS;
+
+  // ── Slide data for result view ──
+  const currentOriginal = slides[activeSlide];
+  const currentTranslated = translated.find(t => t.slideNum === (currentOriginal?.num));
+
+  const STEPS = ["อัปโหลดไฟล์", "เลือกภาษา", "กำลังแปล", "ผลลัพธ์"];
+
+  // ── RENDER ──
+  return (
+    <div style={S.app}>
+      {/* Header */}
+      <header style={S.header}>
+        <div style={S.logo}>
+          <div style={S.logoDot} />
+          <span>SlideTranslate</span>
+          <span style={{ fontSize:11, color:"#4a4a7a", fontWeight:400, marginLeft:4 }}>AI PowerPoint Translator</span>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          {step === 3 && <span style={S.tag("green")}>✓ แปลสำเร็จ {slides.length} สไลด์</span>}
+          {["mymemory","claude"].map(e => (
+            <button key={e} style={{ ...S.btnSmall, background: engine===e ? "rgba(99,102,241,0.25)" : undefined, borderColor: engine===e ? "rgba(99,102,241,0.6)" : undefined }}
+              onClick={() => { setEngine(e); localStorage.setItem("engine", e); }}>
+              {e==="mymemory" ? "🌐 MyMemory" : "🤖 Claude"}
+            </button>
+          ))}
+          {engine === "claude" && (
+            <button style={{ ...S.btnSmall, background: showKey ? "rgba(99,102,241,0.25)" : undefined, borderColor: showKey ? "rgba(99,102,241,0.6)" : undefined }} onClick={() => setShowKey(!showKey)}>
+              🔑 API Key {claudeKey ? "●" : "○"}
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Claude API Key Panel */}
+      {showKey && (
+        <div style={{ background:"#0a0a1e", borderBottom:"1px solid #1a1a35", padding:"16px 28px" }}>
+          <div style={{ maxWidth:1100, margin:"0 auto", display:"flex", alignItems:"center", gap:16 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>Claude API Key</div>
+              <div style={{ fontSize:12, color:"#6a6a9a" }}>ใส่ key จาก console.anthropic.com — เก็บใน localStorage เท่านั้น ไม่ส่งออก</div>
+            </div>
+            <input
+              style={{ ...S.input, width:380, fontFamily:"monospace", fontSize:13 }}
+              type="password"
+              placeholder="sk-ant-..."
+              value={claudeKey}
+              onChange={e => { setClaudeKey(e.target.value); localStorage.setItem("claude_api_key", e.target.value); }}
+            />
+            <button style={S.btnSmall} onClick={() => setShowKey(false)}>ปิด</button>
+          </div>
+        </div>
+      )}
+
+
+
+      {/* Firebase Config Panel */}
+      {showFb && (
+        <div style={{ background:"#0a0a1e", borderBottom:"1px solid #1a1a35", padding:"20px 28px" }}>
+          <div style={{ maxWidth:1100, margin:"0 auto" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:15, marginBottom:4 }}>Firebase Storage Configuration</div>
+                <div style={{ fontSize:12, color:"#6a6a9a" }}>เพื่อบันทึกไฟล์ต้นฉบับและผลการแปลไว้บน Firebase Storage (ไม่จำเป็นก็ได้)</div>
+              </div>
+              <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, fontWeight:600 }}>
+                <input type="checkbox" checked={fbEnabled} onChange={e => setFbEnabled(e.target.checked)} style={{ width:16, height:16 }} />
+                เปิดใช้งาน Firebase
+              </label>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+              {[
+                ["apiKey", "API Key"],
+                ["authDomain", "Auth Domain"],
+                ["projectId", "Project ID"],
+                ["storageBucket", "Storage Bucket"],
+                ["messagingSenderId", "Messaging Sender ID"],
+                ["appId", "App ID"]
+              ].map(([k, label]) => (
+                <div key={k} style={S.fbField}>
+                  <div style={S.label}>{label}</div>
+                  <input
+                    style={S.input}
+                    placeholder={`your-${k}`}
+                    value={fbCfg[k]}
+                    onChange={e => setFbCfg(p => ({ ...p, [k]: e.target.value }))}
+                    disabled={!fbEnabled}
+                  />
+                </div>
+              ))}
+            </div>
+            {fbUploadUrl && (
+              <div style={{ marginTop:12, fontSize:12, color:"#10b981" }}>
+                ✓ ต้นฉบับอยู่บน Firebase: <a href={fbUploadUrl} target="_blank" style={{ color:"#6366f1" }}>ดูไฟล์</a>
+              </div>
+            )}
+            {fbResultUrl && (
+              <div style={{ marginTop:6, fontSize:12, color:"#10b981" }}>
+                ✓ ผลการแปลอยู่บน Firebase: <a href={fbResultUrl} target="_blank" style={{ color:"#6366f1" }}>ดูไฟล์</a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main */}
+      <main style={S.main}>
+        {/* Stepper */}
+        <div style={S.stepper}>
+          {STEPS.map((label, i) => (
+            <div key={i} style={{ display:"flex", alignItems:"center" }}>
+              <div style={S.stepItem(step === i, step > i)}>
+                <div style={S.stepNum(step === i, step > i)}>{step > i ? "✓" : i + 1}</div>
+                {label}
+              </div>
+              {i < STEPS.length - 1 && <div style={S.stepLine} />}
+            </div>
+          ))}
+        </div>
+
+        {/* ── STEP 0: Upload ── */}
+        {step === 0 && (
+          <div style={S.card}>
+            <div
+              style={S.uploadZone(drag)}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onClick={() => document.getElementById("fileInput").click()}
+            >
+              <div style={{ fontSize:56 }}>📊</div>
+              <div style={{ fontSize:20, fontWeight:700, color:"#fff" }}>วางไฟล์ PowerPoint ที่นี่</div>
+              <div style={{ fontSize:14, color:"#6a6a9a" }}>หรือคลิกเพื่อเลือกไฟล์ .pptx / .ppt จากเครื่อง</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"center", marginTop:8 }}>
+                {["ภาษาไทย", "中文", "日本語", "한국어", "ລາວ", "ภาษาอื่นๆ 30+ ภาษา"].map(t => (
+                  <span key={t} style={S.tag("blue")}>{t}</span>
+                ))}
+              </div>
+              {busy && (
+                <div style={{ width:"100%", maxWidth:300, marginTop:8 }}>
+                  <div style={{ ...S.progress, marginBottom:6 }}><div style={S.progressBar(progress.pct)} /></div>
+                  <div style={{ fontSize:12, color:"#6a6a9a" }}>{progress.msg}</div>
+                </div>
+              )}
+            </div>
+            <input id="fileInput" type="file" accept=".pptx,.ppt" style={{ display:"none" }} onChange={e => handleFile(e.target.files[0])} />
+
+            <div style={{ marginTop:20, padding:16, background:"rgba(99,102,241,0.05)", borderRadius:12, border:"1px solid rgba(99,102,241,0.15)", fontSize:13, color:"#8a8ac0", lineHeight:1.7 }}>
+              <strong style={{ color:"#a5a5ff" }}>💡 หมายเหตุเรื่อง Font</strong><br />
+              Web Preview → โหลด Google Fonts ตามภาษาโดยอัตโนมัติ<br />
+              ไฟล์ PPTX ที่ดาวน์โหลด → เปลี่ยน font declaration ใน XML ให้ตรงกับภาษา เช่น TH Sarabun New (ไทย), Microsoft YaHei (จีน), DokChampa (ลาว)
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 1: Language ── */}
+        {step === 1 && (
+          <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+              <div>
+                <div style={{ fontSize:22, fontWeight:700, color:"#fff", marginBottom:6 }}>เลือกภาษาที่ต้องการแปล</div>
+                <div style={{ fontSize:13, color:"#6a6a9a" }}>ไฟล์: <strong style={{ color:"#a5a5ff" }}>{file?.name}</strong> · {slides.length} สไลด์ · {slides.reduce((a, s) => a + s.paras.length, 0)} ข้อความ</div>
+              </div>
+              <button style={{ ...S.btnOutline, opacity: lang ? 1 : 0.4 }} onClick={lang ? doTranslate : undefined}>
+                แปลเลย →
+              </button>
+            </div>
+
+            <input
+              style={{ ...S.input, marginBottom:16 }}
+              placeholder="🔍 ค้นหาภาษา เช่น Thai, 中文, ไทย..."
+              value={langQ}
+              onChange={e => setLangQ(e.target.value)}
+            />
+
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:10 }}>
+              {filteredLangs.map(l => (
+                <div key={l.code} style={S.langCard(lang?.code === l.code)} onClick={() => setLang(l)}>
+                  <span style={{ fontSize:22 }}>{l.flag}</span>
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:14, color: lang?.code === l.code ? "#fff" : "#c0c0e0" }}>{l.name}</div>
+                    <div style={{ fontSize:11, color:"#6a6a9a", marginTop:2 }}>{l.eng}</div>
+                  </div>
+                  {lang?.code === l.code && <span style={{ marginLeft:"auto", color:"#6366f1", fontSize:16 }}>✓</span>}
+                </div>
+              ))}
+            </div>
+
+            {lang && (
+              <div style={{ marginTop:24, padding:16, background:"rgba(99,102,241,0.08)", borderRadius:12, border:"1px solid rgba(99,102,241,0.2)", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
+                <span style={{ fontSize:32 }}>{lang.flag}</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:700, color:"#fff" }}>แปลเป็น {lang.name} ({lang.eng})</div>
+                  <div style={{ fontSize:12, color:"#6a6a9a", marginTop:4, fontFamily:`'${lang.webFont}', sans-serif` }}>
+                    Web Font: {lang.webFont} · PPTX Font: {lang.pptxLatin}
+                    {lang.rtl ? " · ⟵ RTL" : ""}
+                  </div>
+                </div>
+                {engine !== "claude" && (
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ fontSize:12, color:"#6a6a9a" }}>ต้นฉบับ (ตรวจพบ):</span>
+                    <select
+                      style={{ ...S.input, width:"auto", padding:"6px 10px", fontSize:13 }}
+                      value={srcLang}
+                      onChange={e => { setSrcLang(e.target.value); localStorage.setItem("src_lang", e.target.value); }}
+                    >
+                      {[["en","English"],["th","Thai"],["zh","Chinese"],["ja","Japanese"],["ko","Korean"],["fr","French"],["de","German"],["es","Spanish"],["ru","Russian"],["ar","Arabic"],["vi","Vietnamese"],["id","Indonesian"],["pt","Portuguese"],["it","Italian"]].map(([code,name]) => (
+                        <option key={code} value={code}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button style={S.btn} onClick={doTranslate}>แปลทันที →</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── STEP 2: Translating ── */}
+        {step === 2 && (
+          <div style={{ ...S.card, textAlign:"center", padding:"64px 32px" }}>
+            <div style={{ fontSize:48, marginBottom:20 }}>✨</div>
+            <div style={{ fontSize:22, fontWeight:700, color:"#fff", marginBottom:8 }}>กำลังแปลด้วย AI...</div>
+            <div style={{ fontSize:14, color:"#6a6a9a", marginBottom:32 }}>{progress.msg}</div>
+            <div style={{ maxWidth:400, margin:"0 auto" }}>
+              <div style={{ ...S.progress, height:10 }}>
+                <div style={S.progressBar(progress.pct)} />
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", marginTop:8, fontSize:12, color:"#6a6a9a" }}>
+                <span>0%</span>
+                <span>{progress.pct}%</span>
+                <span>100%</span>
+              </div>
+            </div>
+            <div style={{ marginTop:32, display:"flex", gap:16, justifyContent:"center", flexWrap:"wrap" }}>
+              {slides.map((s, i) => (
+                <div key={i} style={{ padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:600, background: translated.some(t => t.slideNum === s.num) ? "rgba(16,185,129,0.15)" : "rgba(30,30,58,0.8)", color: translated.some(t => t.slideNum === s.num) ? "#10b981" : "#4a4a7a", border:`1px solid ${translated.some(t => t.slideNum === s.num) ? "rgba(16,185,129,0.3)" : "#1e1e3a"}` }}>
+                  Slide {s.num}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 3: Result ── */}
+        {step === 3 && (
+          <div>
+            {/* Action bar */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24, flexWrap:"wrap", gap:12 }}>
+              <div>
+                <div style={{ fontSize:20, fontWeight:700, color:"#fff" }}>
+                  {lang?.flag} แปลเป็น {lang?.name} สำเร็จ!
+                </div>
+                <div style={{ fontSize:13, color:"#6a6a9a", marginTop:4 }}>{slides.length} สไลด์ · Font ในไฟล์: {lang?.pptxLatin}</div>
+              </div>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                <button style={S.btnSmall} onClick={() => { setStep(1); setTranslated([]); }}>← เลือกภาษาใหม่</button>
+                <button style={S.btnSmall} onClick={() => { setStep(0); setFile(null); setSlides([]); setTranslated([]); setLang(null); }}>อัปโหลดใหม่</button>
+                <button style={{ ...S.btn, opacity: busy ? 0.6 : 1 }} onClick={downloadPptx} disabled={busy}>
+                  {busy ? "⏳ กำลังสร้าง..." : "⬇️ ดาวน์โหลด PPTX"}
+                </button>
+              </div>
+            </div>
+
+            {/* Slide tabs */}
+            <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:8, marginBottom:16 }}>
+              {slides.map((s, i) => (
+                <button key={i} style={S.slideTab(activeSlide === i)} onClick={() => setActiveSlide(i)}>
+                  Slide {s.num}
+                </button>
+              ))}
+            </div>
+
+            {/* Side-by-side view */}
+            <div style={S.grid2}>
+              {/* Original */}
+              <div style={S.card}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                  <span style={S.tag("blue")}>📄 ต้นฉบับ</span>
+                  <span style={{ fontSize:12, color:"#6a6a9a" }}>{currentOriginal?.paras.length} ข้อความ</span>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                  {currentOriginal?.paras.map((p, i) => (
+                    <div key={i} style={{ padding:"10px 14px", background:"#080814", borderRadius:10, border:"1px solid #1a1a35", fontSize:14, lineHeight:1.7, color:"#c0c0d8" }}>
+                      {p.text}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Translated */}
+              <div style={S.card}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                  <span style={S.tag("green")}>✓ {lang?.flag} แปลแล้ว</span>
+                  <span style={{ fontSize:12, color:"#6a6a9a", fontFamily:`'${lang?.webFont}', sans-serif` }}>{lang?.webFont}</span>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                  {currentTranslated?.paragraphs.map((p, i) => (
+                    <div key={i} style={{ padding:"10px 14px", background:"rgba(99,102,241,0.05)", borderRadius:10, border:"1px solid rgba(99,102,241,0.2)", ...S.textBlock(lang?.webFont, lang?.rtl) }}>
+                      {p.text}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Font info banner */}
+            <div style={{ marginTop:20, padding:16, background:"rgba(168,85,247,0.05)", borderRadius:12, border:"1px solid rgba(168,85,247,0.2)", fontSize:13, display:"flex", gap:24, flexWrap:"wrap", color:"#c084fc" }}>
+              <div><strong>🌐 Web Font:</strong> {lang?.webFont} (จาก Google Fonts)</div>
+              <div><strong>📂 PPTX Font:</strong> {lang?.pptxLatin} (เปลี่ยนแล้วในไฟล์)</div>
+              {lang?.rtl && <div><strong>⟵ ทิศทาง:</strong> Right-to-Left (RTL)</div>}
+              <div><strong>📊 สไลด์ทั้งหมด:</strong> {slides.length} slides</div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer style={{ borderTop:"1px solid #1a1a35", padding:"16px 28px", display:"flex", justifyContent:"center", gap:24, fontSize:12, color:"#3a3a6a" }}>
+        <span>SlideTranslate · Powered by Claude AI</span>
+        <span>รองรับ {LANGS.length} ภาษาทั่วโลก</span>
+        <span>Font เปลี่ยนอัตโนมัติทั้ง Web & PPTX</span>
+      </footer>
+    </div>
+  );
+}
