@@ -205,6 +205,7 @@ export default function App() {
   const [fbResultUrl, setFbResultUrl] = useState(null);
   const [showOriginal, setShowOriginal] = useState(false);
   const [skippedParas, setSkippedParas] = useState(new Set()); // Set of "slideNum-paraIdx" keys
+  const [showPreview, setShowPreview] = useState(false);
   const [fileType, setFileType] = useState("pptx"); // "pptx"|"ppt"|"docx"|"xlsx"|"image"
   const [imageData, setImageData] = useState(null); // base64 for image preview
   const [engine, setEngine] = useState(() => { const e = localStorage.getItem("engine"); return e === "libre" ? "mymemory" : (e || "googletrans"); });
@@ -1025,6 +1026,9 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 <button style={{ ...S.btnSmall, flex: isMobile ? 1 : undefined, textAlign:"center" }} onClick={() => { setStep(1); setTranslated([]); }}>← ภาษาใหม่</button>
                 <button style={{ ...S.btnSmall, flex: isMobile ? 1 : undefined, textAlign:"center" }} onClick={() => { setStep(0); setFile(null); setSlides([]); setTranslated([]); setLang(null); }}>อัปโหลดใหม่</button>
+                <button style={{ ...S.btnSmall, flex: isMobile ? 1 : undefined, textAlign:"center", background:"rgba(168,85,247,0.15)", borderColor:"rgba(168,85,247,0.4)", color:"#c084fc" }} onClick={() => setShowPreview(true)}>
+                  👁️ Preview
+                </button>
                 <button style={{ ...S.btn, opacity: busy ? 0.6 : 1, justifyContent:"center", width: isMobile ? "100%" : undefined }} onClick={downloadFile} disabled={busy}>
                   {busy ? "⏳ กำลังสร้าง..." : fileType === "image" ? "⬇️ บันทึกข้อความ .txt" : fileType === "docx" ? "⬇️ ดาวน์โหลด DOCX" : fileType === "xlsx" ? "⬇️ ดาวน์โหลด XLSX" : "⬇️ ดาวน์โหลด PPTX"}
                 </button>
@@ -1158,6 +1162,112 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
           </div>
         )}
       </main>
+
+      {/* ── Preview Modal ── */}
+      {showPreview && step === 3 && (() => {
+        const previewSlide = slides[activeSlide];
+        const previewTrans = translated.find(t => t.slideNum === previewSlide?.num);
+        const isXlsx = fileType === "xlsx";
+        const isDocx = fileType === "docx";
+        return (
+          <div
+            style={{ position:"fixed", inset:0, zIndex:1000, background:"rgba(0,0,0,0.85)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"16px" }}
+            onClick={e => { if (e.target === e.currentTarget) setShowPreview(false); }}
+          >
+            {/* Modal card */}
+            <div style={{ background:"#0e0e20", borderRadius:16, border:"1px solid #2a2a50", width:"100%", maxWidth:900, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 32px 80px rgba(0,0,0,0.7)" }}>
+              {/* Modal header */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", borderBottom:"1px solid #1a1a35", position:"sticky", top:0, background:"#0e0e20", zIndex:10 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:"#c084fc" }}>👁️ Preview</span>
+                  <span style={{ fontSize:12, color:"#6a6a9a" }}>{lang?.flag} {lang?.name} · {lang?.webFont}</span>
+                  {skippedParas.size > 0 && <span style={{ fontSize:11, color:"#f87171", background:"rgba(239,68,68,0.1)", padding:"2px 8px", borderRadius:6 }}>⛔ {skippedParas.size} ต้นฉบับ</span>}
+                </div>
+                <button onClick={() => setShowPreview(false)} style={{ background:"none", border:"none", color:"#6a6a9a", fontSize:20, cursor:"pointer", lineHeight:1 }}>×</button>
+              </div>
+
+              {/* Slide navigation */}
+              {slides.length > 1 && (
+                <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 20px", borderBottom:"1px solid #1a1a35", overflowX:"auto" }}>
+                  <button onClick={() => setActiveSlide(i => Math.max(0, i - 1))} disabled={activeSlide === 0} style={{ ...S.btnSmall, padding:"4px 10px", opacity: activeSlide === 0 ? 0.3 : 1 }}>‹</button>
+                  {slides.map((s, i) => (
+                    <button key={i} onClick={() => setActiveSlide(i)} style={{ ...S.btnSmall, padding:"4px 12px", background: activeSlide === i ? "rgba(99,102,241,0.4)" : undefined, color: activeSlide === i ? "#fff" : "#8a8ac0", flexShrink: 0 }}>
+                      {isXlsx ? s.name : `Slide ${s.num}`}
+                    </button>
+                  ))}
+                  <button onClick={() => setActiveSlide(i => Math.min(slides.length - 1, i + 1))} disabled={activeSlide === slides.length - 1} style={{ ...S.btnSmall, padding:"4px 10px", opacity: activeSlide === slides.length - 1 ? 0.3 : 1 }}>›</button>
+                </div>
+              )}
+
+              {/* Preview content */}
+              <div style={{ padding:"24px" }}>
+                {isXlsx ? (
+                  /* Excel: table view */
+                  <div style={{ overflowX:"auto" }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:`'${lang?.webFont}', sans-serif`, fontSize:13 }}>
+                      <tbody>
+                        {previewTrans?.paragraphs.map((p, i) => {
+                          const skipKey = `${previewSlide?.num}-${p.idx}`;
+                          const isSkipped = skippedParas.has(skipKey);
+                          const origText = previewSlide?.paras[i]?.text || p.text;
+                          return (
+                            <tr key={i} style={{ borderBottom:"1px solid #1a1a35" }}>
+                              <td style={{ padding:"8px 10px", color:"#6a6a9a", fontSize:11, whiteSpace:"nowrap", width:60 }}>{p.idx}</td>
+                              <td style={{ padding:"8px 10px", color:"#8a8ac0", fontSize:12 }}>{origText}</td>
+                              <td style={{ padding:"8px 10px", color: isSkipped ? "#6a6a9a" : "#dde1f0", fontStyle: isSkipped ? "italic" : "normal" }}>{isSkipped ? origText : p.text}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : isDocx ? (
+                  /* Word: document view */
+                  <div style={{ background:"#fff", borderRadius:10, padding:"40px 48px", maxWidth:700, margin:"0 auto", boxShadow:"0 8px 32px rgba(0,0,0,0.4)" }}>
+                    {previewTrans?.paragraphs.map((p, i) => {
+                      const skipKey = `${previewSlide?.num}-${p.idx}`;
+                      const isSkipped = skippedParas.has(skipKey);
+                      const origText = previewSlide?.paras[i]?.text || p.text;
+                      return (
+                        <p key={i} style={{ margin:"0 0 12px 0", fontFamily:`'${lang?.webFont}', serif`, fontSize:14, lineHeight:1.8, color: isSkipped ? "#999" : "#111", fontStyle: isSkipped ? "italic" : "normal", direction: lang?.rtl ? "rtl" : "ltr" }}>
+                          {isSkipped ? origText : p.text}
+                        </p>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* PowerPoint: slide-like 16:9 card */
+                  <div style={{ position:"relative", width:"100%", paddingTop:"56.25%", background:"linear-gradient(135deg,#1a1a3e,#0d0d28)", borderRadius:12, overflow:"hidden", boxShadow:"0 8px 32px rgba(0,0,0,0.5)", border:"2px solid #2a2a50" }}>
+                    <div style={{ position:"absolute", inset:0, padding:"5%", display:"flex", flexDirection:"column", justifyContent:"center", gap:"2%", overflow:"hidden" }}>
+                      {previewTrans?.paragraphs.map((p, i) => {
+                        const skipKey = `${previewSlide?.num}-${p.idx}`;
+                        const isSkipped = skippedParas.has(skipKey);
+                        const origText = previewSlide?.paras[i]?.text || p.text;
+                        const displayText = isSkipped ? origText : p.text;
+                        return (
+                          <div key={i} style={{ fontFamily:`'${lang?.webFont}', sans-serif`, fontSize:"clamp(10px, 2.2vw, 22px)", lineHeight:1.5, color: isSkipped ? "rgba(160,160,180,0.6)" : "#ffffff", fontStyle: isSkipped ? "italic" : "normal", direction: lang?.rtl ? "rtl" : "ltr", textAlign: lang?.rtl ? "right" : "left", overflow:"hidden", maxHeight:"20%", textOverflow:"ellipsis", whiteSpace:"pre-wrap" }}>
+                            {displayText}
+                          </div>
+                        );
+                      })}
+                      {/* Slide number badge */}
+                      <div style={{ position:"absolute", bottom:"3%", right:"3%", fontSize:"clamp(8px,1.2vw,13px)", color:"rgba(255,255,255,0.25)", fontFamily:"monospace" }}>
+                        {previewSlide?.num} / {slides.length}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal footer */}
+              <div style={{ padding:"12px 20px", borderTop:"1px solid #1a1a35", display:"flex", justifyContent:"flex-end", gap:8 }}>
+                <button style={S.btnSmall} onClick={() => setShowPreview(false)}>ปิด</button>
+                <button style={S.btn} onClick={() => { setShowPreview(false); downloadFile(); }} disabled={busy}>⬇️ ดาวน์โหลด</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Footer */}
       <footer style={{ borderTop:"1px solid #1a1a35", padding: isMobile ? "12px 16px" : "16px 28px", display:"flex", justifyContent:"center", flexWrap:"wrap", gap: isMobile ? 8 : 24, fontSize:12, color:"#3a3a6a", textAlign:"center" }}>
