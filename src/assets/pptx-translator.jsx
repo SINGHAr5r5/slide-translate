@@ -229,11 +229,11 @@ export default function App() {
       document.head.appendChild(s);
     };
 
-    if (window.JSZip && window.CFB && window.XLSX) { setReady(true); return; }
+    if (window.JSZip && window.XLSX && window.CFB) { setReady(true); return; }
     loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js", () => {
-      loadScript("https://cdn.jsdelivr.net/npm/cfb/dist/cfb.min.js", () => {
-        if (window.XLSX) { setReady(true); return; }
-        loadScript("https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js", () => setReady(true));
+      loadScript("https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js", () => {
+        // CFB must load LAST — xlsx bundles its own CFB internally and may overwrite window.CFB
+        loadScript("https://cdn.jsdelivr.net/npm/cfb/dist/cfb.min.js", () => setReady(true));
       });
     });
   }, []);
