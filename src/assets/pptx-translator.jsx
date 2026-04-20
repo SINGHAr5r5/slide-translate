@@ -204,6 +204,7 @@ export default function App() {
   const [fbUploadUrl, setFbUploadUrl] = useState(null);
   const [fbResultUrl, setFbResultUrl] = useState(null);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [skippedParas, setSkippedParas] = useState(new Set()); // Set of "slideNum-paraIdx" keys
   const [fileType, setFileType] = useState("pptx"); // "pptx"|"ppt"|"docx"|"xlsx"|"image"
   const [imageData, setImageData] = useState(null); // base64 for image preview
   const [engine, setEngine] = useState(() => { const e = localStorage.getItem("engine"); return e === "libre" ? "mymemory" : (e || "googletrans"); });
@@ -633,11 +634,20 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
   const downloadFile = async () => {
     if (!lang) return;
     setBusy(true);
+
+    // Build original text map for skipped paras
+    const origMap = {};
+    slides.forEach(s => { origMap[s.num] = {}; s.paras.forEach(p => { origMap[s.num][p.idx] = p.text; }); });
+    const resolveText = (slideNum, paraIdx, translatedText) => {
+      const key = `${slideNum}-${paraIdx}`;
+      return skippedParas.has(key) ? (origMap[slideNum]?.[paraIdx] ?? translatedText) : translatedText;
+    };
+
     try {
       if (fileType === "docx") {
         const zip = zipRef.current;
         const tMap = {};
-        translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; }); });
+        translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = resolveText(s.slideNum, p.idx, p.text); }); });
         const newXml = buildDocxXml(slides[0].xml, tMap[1] || {}, lang);
         zip.file("word/document.xml", newXml);
         const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
@@ -653,7 +663,7 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
           const sheetName = slides.find(sl => sl.num === s.slideNum)?.name;
           if (!sheetName || !wb.Sheets[sheetName]) return;
           s.paragraphs.forEach(p => {
-            if (wb.Sheets[sheetName][p.idx]) wb.Sheets[sheetName][p.idx].v = p.text;
+            if (wb.Sheets[sheetName][p.idx]) wb.Sheets[sheetName][p.idx].v = resolveText(s.slideNum, p.idx, p.text);
           });
         });
         const out = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -686,7 +696,7 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
         }
         const pptx = new window.PptxGenJS();
         const tMap = {};
-        translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; }); });
+        translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = resolveText(s.slideNum, p.idx, p.text); }); });
         for (const slide of slides) {
           const pSlide = pptx.addSlide();
           const textItems = slide.paras.map((p, i) => ({ text: (tMap[slide.num]?.[p.idx] ?? p.text), options: { breakLine: i < slide.paras.length - 1 } }));
@@ -700,7 +710,7 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
       const zip = zipRef.current;
       if (!zip) return;
       const tMap = {};
-      translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = p.text; }); });
+      translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = resolveText(s.slideNum, p.idx, p.text); }); });
       for (const slide of slides) {
         zip.file(slide.path, buildXml(slide.xml, tMap[slide.num] || {}, lang));
       }
@@ -1059,45 +1069,81 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
               <div style={S.card}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
                   <span style={S.tag("green")}>✏️ {lang?.flag} แปลแล้ว (แก้ไขได้)</span>
-                  <span style={{ fontSize:12, color:"#6a6a9a", fontFamily:`'${lang?.webFont}', sans-serif` }}>{lang?.webFont}</span>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ fontSize:12, color:"#6a6a9a", fontFamily:`'${lang?.webFont}', sans-serif` }}>{lang?.webFont}</span>
+                  </div>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-                  {currentTranslated?.paragraphs.map((p, i) => (
-                    <textarea
-                      key={i}
-                      value={p.text}
-                      rows={Math.max(2, Math.ceil(p.text.length / 60))}
-                      onChange={e => {
-                        const newText = e.target.value;
-                        setTranslated(prev => prev.map(s =>
-                          s.slideNum !== currentOriginal?.num ? s : {
-                            ...s,
-                            paragraphs: s.paragraphs.map((para, pi) =>
-                              pi === i ? { ...para, text: newText } : para
-                            )
-                          }
-                        ));
-                      }}
-                      style={{
-                        ...S.textBlock(lang?.webFont, lang?.rtl),
-                        padding:"10px 14px",
-                        background:"rgba(99,102,241,0.05)",
-                        borderRadius:10,
-                        border:"1px solid rgba(99,102,241,0.2)",
-                        resize:"vertical",
-                        outline:"none",
-                        width:"100%",
-                        boxSizing:"border-box",
-                        fontFamily:`'${lang?.webFont}', sans-serif`,
-                        fontSize:14,
-                        lineHeight:1.7,
-                        color:"#dde1f0",
-                        transition:"border-color 0.2s",
-                      }}
-                      onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
-                      onBlur={e => e.target.style.borderColor = "rgba(99,102,241,0.2)"}
-                    />
-                  ))}
+                  {currentTranslated?.paragraphs.map((p, i) => {
+                    const skipKey = `${currentOriginal?.num}-${p.idx}`;
+                    const isSkipped = skippedParas.has(skipKey);
+                    const originalText = currentOriginal?.paras[i]?.text || p.text;
+                    return (
+                      <div key={i} style={{ position:"relative" }}>
+                        {/* Toggle button */}
+                        <button
+                          onClick={() => {
+                            const next = new Set(skippedParas);
+                            if (isSkipped) next.delete(skipKey); else next.add(skipKey);
+                            setSkippedParas(next);
+                          }}
+                          title={isSkipped ? "คลิกเพื่อใช้คำแปล" : "คลิกเพื่อคงต้นฉบับ"}
+                          style={{
+                            position:"absolute", top:6, right:6, zIndex:2,
+                            padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700, cursor:"pointer", border:"none",
+                            background: isSkipped ? "rgba(239,68,68,0.2)" : "rgba(99,102,241,0.2)",
+                            color: isSkipped ? "#f87171" : "#8b8bff",
+                          }}
+                        >
+                          {isSkipped ? "⛔ ต้นฉบับ" : "✅ แปล"}
+                        </button>
+
+                        {isSkipped ? (
+                          /* Show original text (greyed out, non-editable) */
+                          <div style={{
+                            padding:"10px 14px", paddingRight:72,
+                            background:"rgba(30,30,50,0.5)", borderRadius:10,
+                            border:"1px solid rgba(100,100,130,0.25)",
+                            fontSize:14, lineHeight:1.7, color:"#6a6a9a",
+                            fontStyle:"italic", minHeight:44,
+                          }}>
+                            {originalText}
+                          </div>
+                        ) : (
+                          /* Editable translated textarea */
+                          <textarea
+                            value={p.text}
+                            rows={Math.max(2, Math.ceil(p.text.length / 60))}
+                            onChange={e => {
+                              const newText = e.target.value;
+                              setTranslated(prev => prev.map(s =>
+                                s.slideNum !== currentOriginal?.num ? s : {
+                                  ...s,
+                                  paragraphs: s.paragraphs.map((para, pi) =>
+                                    pi === i ? { ...para, text: newText } : para
+                                  )
+                                }
+                              ));
+                            }}
+                            style={{
+                              ...S.textBlock(lang?.webFont, lang?.rtl),
+                              padding:"10px 14px", paddingRight:72,
+                              background:"rgba(99,102,241,0.05)",
+                              borderRadius:10,
+                              border:"1px solid rgba(99,102,241,0.2)",
+                              resize:"vertical", outline:"none",
+                              width:"100%", boxSizing:"border-box",
+                              fontFamily:`'${lang?.webFont}', sans-serif`,
+                              fontSize:14, lineHeight:1.7, color:"#dde1f0",
+                              transition:"border-color 0.2s",
+                            }}
+                            onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
+                            onBlur={e => e.target.style.borderColor = "rgba(99,102,241,0.2)"}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
