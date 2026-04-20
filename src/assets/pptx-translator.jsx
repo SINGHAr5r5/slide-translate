@@ -59,11 +59,12 @@ const LANGS = [
 
 // ── Engine registry ────────────────────────────────────────────────
 const ENGINES = [
-  { id:"googletrans", name:"Google Translate", icon:"🔍", free:true,  placeholder:"",           hint:"ฟรี ไม่ต้องใส่ Key — ใช้ Google Translate API" },
-  { id:"mymemory",   name:"MyMemory",         icon:"🌐", free:true,  placeholder:"",           hint:"ฟรี ไม่ต้องใส่ Key — MyMemory Translation" },
-  { id:"claude",     name:"Claude (Sonnet)",  icon:"🤖", free:false, placeholder:"sk-ant-...", hint:"API Key จาก console.anthropic.com" },
-  { id:"openai",     name:"GPT-4o",           icon:"🧠", free:false, placeholder:"sk-...",     hint:"API Key จาก platform.openai.com" },
-  { id:"gemini",     name:"Gemini Flash",     icon:"✨", free:false, placeholder:"AIza...",    hint:"API Key จาก aistudio.google.com" },
+  { id:"googletrans", name:"Google Translate", icon:"🔍", free:true,  placeholder:"",            hint:"ฟรี ไม่ต้องใส่ Key — ใช้ Google Translate API" },
+  { id:"mymemory",   name:"MyMemory",         icon:"🌐", free:true,  placeholder:"",            hint:"ฟรี ไม่ต้องใส่ Key — MyMemory Translation" },
+  { id:"groq",       name:"Groq · Llama 3.3", icon:"⚡", free:false, placeholder:"gsk_...",       hint:"Key ฟรีจาก groq.com — ใช้ Llama 3.3 70B แม่นมาก" },
+  { id:"claude",     name:"Claude (Sonnet)",  icon:"🤖", free:false, placeholder:"sk-ant-...",  hint:"API Key จาก console.anthropic.com" },
+  { id:"openai",     name:"GPT-4o",           icon:"🧠", free:false, placeholder:"sk-...",      hint:"API Key จาก platform.openai.com" },
+  { id:"gemini",     name:"Gemini Flash",     icon:"✨", free:false, placeholder:"AIza...",     hint:"API Key จาก aistudio.google.com" },
 ];
 
 // ── Inline styles ──────────────────────────────────────────────────
@@ -207,6 +208,7 @@ export default function App() {
   const [claudeKey, setClaudeKey] = useState(() => localStorage.getItem("claude_api_key") || "");
   const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem("openai_api_key") || "");
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
+  const [groqKey,   setGroqKey]   = useState(() => localStorage.getItem("groq_api_key")   || "");
   const [srcLang, setSrcLang] = useState(() => localStorage.getItem("src_lang") || "en");
   const [showKey, setShowKey] = useState(false);
   const zipRef = useRef(null);
@@ -358,7 +360,6 @@ export default function App() {
     if (!lang || !slides.length) return;
     setBusy(true);
     setStep(2);
-    // Free engines use larger batch; AI engines process all at once per batch
     const BATCH = (engine === "mymemory" || engine === "googletrans") ? 10 : 5;
     const results = [];
     try {
@@ -368,11 +369,12 @@ export default function App() {
         setProgress({ pct, msg: `แปลสไลด์ ${i + 1}–${Math.min(i + BATCH, slides.length)} จาก ${slides.length}...` });
         const input = batch.map(s => ({ slideNum: s.num, paragraphs: s.paras }));
         let res;
-        if (engine === "mymemory")   res = await callMyMemory(input, lang);
+        if (engine === "mymemory")        res = await callMyMemory(input, lang);
         else if (engine === "googletrans") res = await callGoogleTrans(input, lang);
-        else if (engine === "openai")  res = await callOpenAI(input, lang);
-        else if (engine === "gemini")  res = await callGemini(input, lang);
-        else                           res = await callClaude(input, lang);
+        else if (engine === "groq")        res = await callGroq(input, lang);
+        else if (engine === "openai")      res = await callOpenAI(input, lang);
+        else if (engine === "gemini")      res = await callGemini(input, lang);
+        else                               res = await callClaude(input, lang);
         results.push(...res);
       }
       setTranslated(results);
@@ -393,6 +395,18 @@ export default function App() {
 Rules: Return ONLY valid JSON (same structure), no markdown. Preserve numbers, symbols, URLs. Natural fluent translation.
 
 Input: ${JSON.stringify(batchData)}`;
+
+  const callGroq = async (batchData, lang) => {
+    if (!groqKey) throw new Error("กรุณาใส่ Groq API Key ก่อน (กด 🔑) — สมัครฟรีที่ groq.com");
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "Authorization":`Bearer ${groqKey}` },
+      body: JSON.stringify({ model:"llama-3.3-70b-versatile", max_tokens:4000, messages:[{ role:"user", content:buildAIPrompt(batchData, lang) }] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    return JSON.parse(data.choices[0].message.content.trim().replace(/^```json\n?|^```\n?|```\n?$/gm, ""));
+  };
 
   const callClaude = async (batchData, lang) => {
     if (!claudeKey) throw new Error("กรุณาใส่ Claude API Key ก่อน (กด 🔑)");
@@ -593,7 +607,7 @@ Input: ${JSON.stringify(batchData)}`;
               style={{ ...S.btnSmall, fontSize: isMobile ? 11 : 12, padding: isMobile ? "5px 10px" : "6px 12px", background: showKey ? "rgba(99,102,241,0.25)" : undefined, borderColor: showKey ? "rgba(99,102,241,0.6)" : undefined }}
               onClick={() => setShowKey(v => !v)}
             >
-              🔑 {isMobile ? "Key" : "API Key"} {(engine==="claude"?claudeKey:engine==="openai"?openaiKey:geminiKey) ? "●" : "○"}
+              🔑 {isMobile ? "Key" : "API Key"} {(engine==="claude"?claudeKey:engine==="openai"?openaiKey:engine==="groq"?groqKey:geminiKey) ? "●" : "○"}
             </button>
           )}
         </div>
@@ -602,10 +616,11 @@ Input: ${JSON.stringify(batchData)}`;
       {/* Unified API Key Panel */}
       {showKey && !ENGINES.find(e => e.id === engine)?.free && (() => {
         const eng    = ENGINES.find(e => e.id === engine);
-        const keyVal = engine==="claude" ? claudeKey : engine==="openai" ? openaiKey : geminiKey;
+        const keyVal = engine==="claude" ? claudeKey : engine==="openai" ? openaiKey : engine==="groq" ? groqKey : geminiKey;
         const setKey = (v) => {
-          if (engine==="claude")  { setClaudeKey(v);  localStorage.setItem("claude_api_key", v); }
-          else if (engine==="openai")  { setOpenaiKey(v); localStorage.setItem("openai_api_key", v); }
+          if (engine==="claude")       { setClaudeKey(v); localStorage.setItem("claude_api_key", v); }
+          else if (engine==="openai") { setOpenaiKey(v); localStorage.setItem("openai_api_key", v); }
+          else if (engine==="groq")   { setGroqKey(v);   localStorage.setItem("groq_api_key",   v); }
           else                        { setGeminiKey(v); localStorage.setItem("gemini_api_key", v); }
         };
         return (
