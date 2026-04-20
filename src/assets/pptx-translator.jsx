@@ -59,12 +59,12 @@ const LANGS = [
 
 // ── Engine registry ────────────────────────────────────────────────
 const ENGINES = [
-  { id:"googletrans", name:"Google Translate", icon:"🔍", free:true,  placeholder:"",            hint:"ฟรี ไม่ต้องใส่ Key — ใช้ Google Translate API" },
-  { id:"mymemory",   name:"MyMemory",         icon:"🌐", free:true,  placeholder:"",            hint:"ฟรี ไม่ต้องใส่ Key — MyMemory Translation" },
-  { id:"groq",       name:"Groq · Llama 3.3", icon:"⚡", free:false, placeholder:"gsk_...",       hint:"Key ฟรีจาก groq.com — ใช้ Llama 3.3 70B แม่นมาก" },
-  { id:"claude",     name:"Claude (Sonnet)",  icon:"🤖", free:false, placeholder:"sk-ant-...",  hint:"API Key จาก console.anthropic.com" },
-  { id:"openai",     name:"GPT-4o",           icon:"🧠", free:false, placeholder:"sk-...",      hint:"API Key จาก platform.openai.com" },
-  { id:"gemini",     name:"Gemini Flash",     icon:"✨", free:false, placeholder:"AIza...",     hint:"API Key จาก aistudio.google.com" },
+  { id:"googletrans", name:"Google Translate", icon:"🔍", free:true,  placeholder:"",           hint:"ฟรี ไม่ต้องใส่ Key",                                                      url:null },
+  { id:"mymemory",   name:"MyMemory",         icon:"🌐", free:true,  placeholder:"",           hint:"ฟรี ไม่ต้องใส่ Key",                                                      url:null },
+  { id:"groq",       name:"Groq · Llama 3.3", icon:"⚡", free:false, placeholder:"gsk_...",    hint:"สมัครฟรี ไม่ต้องใส่บัตร — ใช้ Llama 3.3 70B",                            url:"https://console.groq.com/keys" },
+  { id:"claude",     name:"Claude (Sonnet)",  icon:"🤖", free:false, placeholder:"sk-ant-...", hint:"เข้าใจเว็บแล้วไปที่ Account → API Keys",                                  url:"https://console.anthropic.com/settings/keys" },
+  { id:"openai",     name:"GPT-4o",           icon:"🧠", free:false, placeholder:"sk-...",     hint:"เข้าใจเว็บแล้วไปที่ Dashboard → API Keys",                               url:"https://platform.openai.com/api-keys" },
+  { id:"gemini",     name:"Gemini Flash",     icon:"✨", free:false, placeholder:"AIza...",    hint:"สมัครฟรี มี free quota ใช้ได้เยอะ",                                        url:"https://aistudio.google.com/app/apikey" },
 ];
 
 // ── Inline styles ──────────────────────────────────────────────────
@@ -628,7 +628,19 @@ Input: ${JSON.stringify(batchData)}`;
             <div style={{ maxWidth:1100, margin:"0 auto", display:"flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap:12 }}>
               <div style={{ flex:1 }}>
                 <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{eng.icon} {eng.name} — API Key</div>
-                <div style={{ fontSize:12, color:"#6a6a9a" }}>{eng.hint} — เก็บใน localStorage เท่านั้น ไม่ส่งออก</div>
+                <div style={{ fontSize:12, color:"#6a6a9a", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginTop:2 }}>
+                  <span>{eng.hint}</span>
+                  {eng.url && (
+                    <a
+                      href={eng.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color:"#8b8bff", fontWeight:700, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4, padding:"3px 10px", background:"rgba(99,102,241,0.2)", borderRadius:6, border:"1px solid rgba(99,102,241,0.4)", fontSize:11, whiteSpace:"nowrap" }}
+                    >
+                      🔗 ไปขอ Key ฟรี
+                    </a>
+                  )}
+                </div>
               </div>
               <input
                 style={{ ...S.input, width:"100%", maxWidth: isMobile ? "100%" : 400, fontFamily:"monospace", fontSize:13 }}
