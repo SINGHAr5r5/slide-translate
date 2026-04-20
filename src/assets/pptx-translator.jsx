@@ -68,6 +68,30 @@ const ENGINES = [
   { id:"gemini",     name:"Gemini Flash",     icon:"✨", free:false, placeholder:"AIza...",    hint:"สมัครฟรี มี free quota ใช้ได้เยอะ",                                        url:"https://aistudio.google.com/app/apikey" },
 ];
 
+// ── Font options ────────────────────────────────────────────────────
+const FONT_OPTIONS = [
+  { label:"Inter",              web:"Inter",               pptx:"Inter",              group:"ทั่วไป" },
+  { label:"Roboto",             web:"Roboto",              pptx:"Roboto",             group:"ทั่วไป" },
+  { label:"Open Sans",          web:"Open Sans",           pptx:"Open Sans",          group:"ทั่วไป" },
+  { label:"Poppins",            web:"Poppins",             pptx:"Poppins",            group:"ทั่วไป" },
+  { label:"Montserrat",         web:"Montserrat",          pptx:"Montserrat",         group:"ทั่วไป" },
+  { label:"Lato",               web:"Lato",                pptx:"Lato",               group:"ทั่วไป" },
+  { label:"Noto Sans",          web:"Noto Sans",           pptx:"Noto Sans",          group:"ทั่วไป" },
+  { label:"Sarabun",            web:"Sarabun",             pptx:"Sarabun",            group:"ไทย" },
+  { label:"Kanit",              web:"Kanit",               pptx:"Kanit",              group:"ไทย" },
+  { label:"Prompt",             web:"Prompt",              pptx:"Prompt",             group:"ไทย" },
+  { label:"Mitr",               web:"Mitr",                pptx:"Mitr",               group:"ไทย" },
+  { label:"Pridi",              web:"Pridi",               pptx:"Pridi",              group:"ไทย" },
+  { label:"Noto Sans Thai",     web:"Noto Sans Thai",      pptx:"Noto Sans Thai",     group:"ไทย" },
+  { label:"IBM Plex Sans Thai", web:"IBM Plex Sans Thai",  pptx:"IBM Plex Sans Thai", group:"ไทย" },
+  { label:"Noto Sans JP",       web:"Noto Sans JP",        pptx:"Noto Sans CJK JP",   group:"日本語" },
+  { label:"M PLUS 1p",          web:"M PLUS 1p",           pptx:"M PLUS 1p",          group:"日本語" },
+  { label:"Noto Sans KR",       web:"Noto Sans KR",        pptx:"Noto Sans CJK KR",   group:"한국어" },
+  { label:"Noto Sans SC",       web:"Noto Sans SC",        pptx:"Noto Sans CJK SC",   group:"中文" },
+  { label:"Cairo",              web:"Cairo",               pptx:"Cairo",              group:"العربية" },
+  { label:"Noto Sans Arabic",   web:"Noto Sans Arabic",    pptx:"Noto Sans Arabic",   group:"العربية" },
+];
+
 // ── Inline styles ──────────────────────────────────────────────────
 const S = {
   app: { minHeight:"100vh", background:"#070711", color:"#dde1f0", fontFamily:"'Plus Jakarta Sans', sans-serif", display:"flex", flexDirection:"column", overflowX:"hidden" },
@@ -134,7 +158,7 @@ function extractParas(xml) {
   return result;
 }
 
-function buildXml(xml, transByIdx, lang) {
+function buildXml(xml, transByIdx, lang, fontOverride) {
   const doc = new DOMParser().parseFromString(xml, "text/xml");
 
   // Inject translations
@@ -151,11 +175,11 @@ function buildXml(xml, transByIdx, lang) {
   // Change fonts
   ["rPr", "defRPr", "endParaRPr"].forEach(tag => {
     Array.from(doc.getElementsByTagNameNS(NS, tag)).forEach(el => {
-      Array.from(el.getElementsByTagNameNS(NS, "latin")).forEach(n => n.setAttribute("typeface", lang.pptxLatin));
+      Array.from(el.getElementsByTagNameNS(NS, "latin")).forEach(n => n.setAttribute("typeface", fontOverride || lang.pptxLatin));
       const eaArr = Array.from(el.getElementsByTagNameNS(NS, "ea"));
       if (eaArr.length) eaArr.forEach(n => n.setAttribute("typeface", lang.pptxEA));
       if (lang.rtl) {
-        Array.from(el.getElementsByTagNameNS(NS, "cs")).forEach(n => n.setAttribute("typeface", lang.pptxLatin));
+        Array.from(el.getElementsByTagNameNS(NS, "cs")).forEach(n => n.setAttribute("typeface", fontOverride || lang.pptxLatin));
       }
     });
   });
@@ -214,10 +238,15 @@ export default function App() {
   const [groqKey,   setGroqKey]   = useState(() => localStorage.getItem("groq_api_key")   || "");
   const [srcLang, setSrcLang] = useState(() => localStorage.getItem("src_lang") || "en");
   const [showKey, setShowKey] = useState(false);
+  const [customFont, setCustomFont] = useState(null); // null = use lang default
   const zipRef = useRef(null);
   const xlsxWbRef = useRef(null); // SheetJS workbook ref
 
-  // Load JSZip + CFB + Plus Jakarta Sans font
+  // Computed effective fonts (custom override or lang default)
+  const effectiveWebFont  = customFont?.web  || lang?.webFont;
+  const effectivePptxFont = customFont?.pptx || lang?.pptxLatin;
+
+  // Load JSZip + CFB + SheetJS + Plus Jakarta Sans font
   useEffect(() => {
     const link = document.createElement("link");
     link.rel = "stylesheet";
@@ -238,6 +267,18 @@ export default function App() {
       });
     });
   }, []);
+
+  // Dynamically load selected custom font from Google Fonts
+  useEffect(() => {
+    if (!customFont) return;
+    const id = `gfont-custom-${customFont.web.replace(/\s/g, "-")}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(customFont.web)}:wght@400;600;700&display=swap`;
+    document.head.appendChild(link);
+  }, [customFont]);
 
   // Load Google Font when language selected
   useEffect(() => {
@@ -700,7 +741,7 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
         for (const slide of slides) {
           const pSlide = pptx.addSlide();
           const textItems = slide.paras.map((p, i) => ({ text: (tMap[slide.num]?.[p.idx] ?? p.text), options: { breakLine: i < slide.paras.length - 1 } }));
-          pSlide.addText(textItems, { x:0.3, y:0.3, w:"94%", h:"94%", fontSize:20, fontFace:lang.pptxLatin, color:"000000", valign:"top", wrap:true, rtlMode:!!lang.rtl, line:{type:"none"}, fill:{type:"none"} });
+          pSlide.addText(textItems, { x:0.3, y:0.3, w:"94%", h:"94%", fontSize:20, fontFace:effectivePptxFont, color:"000000", valign:"top", wrap:true, rtlMode:!!lang.rtl, line:{type:"none"}, fill:{type:"none"} });
         }
         await pptx.writeFile({ fileName: `[${lang.code}] ${file.name.replace(/\.ppt$/i, ".pptx")}` });
         return;
@@ -712,7 +753,7 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
       const tMap = {};
       translated.forEach(s => { tMap[s.slideNum] = {}; s.paragraphs.forEach(p => { tMap[s.slideNum][p.idx] = resolveText(s.slideNum, p.idx, p.text); }); });
       for (const slide of slides) {
-        zip.file(slide.path, buildXml(slide.xml, tMap[slide.num] || {}, lang));
+        zip.file(slide.path, buildXml(slide.xml, tMap[slide.num] || {}, lang, effectivePptxFont));
       }
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
       const url = URL.createObjectURL(blob);
@@ -959,7 +1000,7 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
                 <div style={{ flex:1 }}>
                   <div style={{ fontWeight:700, color:"#fff" }}>แปลเป็น {lang.name} ({lang.eng})</div>
                   <div style={{ fontSize:12, color:"#6a6a9a", marginTop:4, fontFamily:`'${lang.webFont}', sans-serif` }}>
-                    Web Font: {lang.webFont} · PPTX Font: {lang.pptxLatin}
+                    Web Font: {effectiveWebFont} · PPTX Font: {effectivePptxFont}{customFont ? " ✏️" : ""}
                     {lang.rtl ? " · ⟵ RTL" : ""}
                   </div>
                 </div>
@@ -1067,10 +1108,30 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
 
               {/* Translated */}
               <div style={S.card}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
                   <span style={S.tag("green")}>✏️ {lang?.flag} แปลแล้ว (แก้ไขได้)</span>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <span style={{ fontSize:12, color:"#6a6a9a", fontFamily:`'${lang?.webFont}', sans-serif` }}>{lang?.webFont}</span>
+                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                    <span style={{ fontSize:11, color:"#6a6a9a" }}>🏷️ ฟอนต์:</span>
+                    <select
+                      value={customFont?.web || ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (!val) { setCustomFont(null); return; }
+                        const found = FONT_OPTIONS.find(f => f.web === val);
+                        if (found) setCustomFont(found);
+                      }}
+                      style={{ background:"#0e0e1e", color:"#a5a5ff", border:"1px solid rgba(99,102,241,0.3)", borderRadius:7, padding:"4px 8px", fontSize:12, cursor:"pointer", fontFamily:`'${effectiveWebFont}', sans-serif`, maxWidth:180 }}
+                    >
+                      <option value="" style={{ background:"#0e0e1e" }}>⭐ {lang?.webFont} (ค่าเริ่มต้น)</option>
+                      {Object.entries(FONT_OPTIONS.reduce((acc, f) => ({ ...acc, [f.group]: [...(acc[f.group]||[]), f] }), {})).map(([group, fonts]) => (
+                        <optgroup key={group} label={group} style={{ background:"#0e0e1e" }}>
+                          {fonts.map(f => <option key={f.web} value={f.web} style={{ background:"#0e0e1e", color:"#dde1f0" }}>{f.label}</option>)}
+                        </optgroup>
+                      ))}
+                    </select>
+                    {customFont && (
+                      <button onClick={() => setCustomFont(null)} title="รีเซ็ตเป็นค่าเริ่มต้น" style={{ background:"none", border:"none", color:"#6a6a9a", fontSize:14, cursor:"pointer", padding:"2px 4px", lineHeight:1 }}>×</button>
+                    )}
                   </div>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -1126,14 +1187,14 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
                               ));
                             }}
                             style={{
-                              ...S.textBlock(lang?.webFont, lang?.rtl),
+                              ...S.textBlock(effectiveWebFont, lang?.rtl),
                               padding:"10px 14px", paddingRight:72,
                               background:"rgba(99,102,241,0.05)",
                               borderRadius:10,
                               border:"1px solid rgba(99,102,241,0.2)",
                               resize:"vertical", outline:"none",
                               width:"100%", boxSizing:"border-box",
-                              fontFamily:`'${lang?.webFont}', sans-serif`,
+                              fontFamily:`'${effectiveWebFont}', sans-serif`,
                               fontSize:14, lineHeight:1.7, color:"#dde1f0",
                               transition:"border-color 0.2s",
                             }}
