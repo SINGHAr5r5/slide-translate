@@ -172,17 +172,19 @@ function buildXml(xml, transByIdx, lang, fontOverride) {
     for (let i = 1; i < tNodes.length; i++) tNodes[i].textContent = "";
   });
 
-  // Change fonts
-  ["rPr", "defRPr", "endParaRPr"].forEach(tag => {
-    Array.from(doc.getElementsByTagNameNS(NS, tag)).forEach(el => {
-      Array.from(el.getElementsByTagNameNS(NS, "latin")).forEach(n => n.setAttribute("typeface", fontOverride || lang.pptxLatin));
-      const eaArr = Array.from(el.getElementsByTagNameNS(NS, "ea"));
-      if (eaArr.length) eaArr.forEach(n => n.setAttribute("typeface", lang.pptxEA));
-      if (lang.rtl) {
-        Array.from(el.getElementsByTagNameNS(NS, "cs")).forEach(n => n.setAttribute("typeface", fontOverride || lang.pptxLatin));
-      }
+  // Change fonts (skip entirely if fontOverride === "__keep__" — preserve original PPTX fonts)
+  if (fontOverride !== "__keep__") {
+    ["rPr", "defRPr", "endParaRPr"].forEach(tag => {
+      Array.from(doc.getElementsByTagNameNS(NS, tag)).forEach(el => {
+        Array.from(el.getElementsByTagNameNS(NS, "latin")).forEach(n => n.setAttribute("typeface", fontOverride || lang.pptxLatin));
+        const eaArr = Array.from(el.getElementsByTagNameNS(NS, "ea"));
+        if (eaArr.length) eaArr.forEach(n => n.setAttribute("typeface", lang.pptxEA));
+        if (lang.rtl) {
+          Array.from(el.getElementsByTagNameNS(NS, "cs")).forEach(n => n.setAttribute("typeface", fontOverride || lang.pptxLatin));
+        }
+      });
     });
-  });
+  }
 
   let out = new XMLSerializer().serializeToString(doc);
   if (!out.startsWith("<?xml")) out = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + out;
@@ -1113,16 +1115,18 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
                   <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                     <span style={{ fontSize:11, color:"#6a6a9a" }}>🏷️ ฟอนต์:</span>
                     <select
-                      value={customFont?.web || ""}
+                      value={customFont?.pptx === "__keep__" ? "__keep__" : (customFont?.web || "")}
                       onChange={e => {
                         const val = e.target.value;
                         if (!val) { setCustomFont(null); return; }
+                        if (val === "__keep__") { setCustomFont({ web: effectiveWebFont, pptx: "__keep__", label: "ใช้ font เดิม" }); return; }
                         const found = FONT_OPTIONS.find(f => f.web === val);
                         if (found) setCustomFont(found);
                       }}
                       style={{ background:"#0e0e1e", color:"#a5a5ff", border:"1px solid rgba(99,102,241,0.3)", borderRadius:7, padding:"4px 8px", fontSize:12, cursor:"pointer", fontFamily:`'${effectiveWebFont}', sans-serif`, maxWidth:180 }}
                     >
                       <option value="" style={{ background:"#0e0e1e" }}>⭐ {lang?.webFont} (ค่าเริ่มต้น)</option>
+                      <option value="__keep__" style={{ background:"#0e0e1e", color:"#34d399" }}>🔒 ใช้ font เดิมของไฟล์</option>
                       {Object.entries(FONT_OPTIONS.reduce((acc, f) => ({ ...acc, [f.group]: [...(acc[f.group]||[]), f] }), {})).map(([group, fonts]) => (
                         <optgroup key={group} label={group} style={{ background:"#0e0e1e" }}>
                           {fonts.map(f => <option key={f.web} value={f.web} style={{ background:"#0e0e1e", color:"#dde1f0" }}>{f.label}</option>)}
