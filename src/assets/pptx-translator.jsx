@@ -743,7 +743,7 @@ No markdown. Preserve formatting symbols. If no text found, return { "results": 
         for (const slide of slides) {
           const pSlide = pptx.addSlide();
           const textItems = slide.paras.map((p, i) => ({ text: (tMap[slide.num]?.[p.idx] ?? p.text), options: { breakLine: i < slide.paras.length - 1 } }));
-          pSlide.addText(textItems, { x:0.3, y:0.3, w:"94%", h:"94%", fontSize:20, fontFace:effectivePptxFont, color:"000000", valign:"top", wrap:true, rtlMode:!!lang.rtl, line:{type:"none"}, fill:{type:"none"} });
+          pSlide.addText(textItems, { x:0.3, y:0.3, w:"94%", h:"94%", fontFace:effectivePptxFont, color:"000000", valign:"top", wrap:true, rtlMode:!!lang.rtl, line:{type:"none"}, fill:{type:"none"} });
         }
         await pptx.writeFile({ fileName: `[${lang.code}] ${file.name.replace(/\.ppt$/i, ".pptx")}` });
         return;
